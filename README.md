@@ -1,6 +1,9 @@
 Dot files
 =========
 
+Platforms
+
+* Ubuntu 14.04
 
 Install
 
