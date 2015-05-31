@@ -3,7 +3,13 @@
 # Config bash
 git clone --depth=1 https://github.com/Bash-it/bash-it.git ~/.bash_it
 ~/.bash_it/install.sh --all
-echo "export BASH_IT_THEME='envy'" > ~/.bash_profile
+if [ -h ~/.bash_profile ]; then
+    rm -f ~/.bash_profile
+fi
+if [ -f ~/.bash_profile ]; then
+    mv --backup ~/.bash_profile ~/.bash_profile.bak
+fi
+ln -s ~/dotfiles/home/.vimrc ~/
 sudo pip install argcomplete
 source ~/.bash_it/bash_it.sh 2>/dev/null
 bash-it disable plugin chruby
