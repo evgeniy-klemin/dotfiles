@@ -10,13 +10,13 @@ sudo apt-get install -y tree
 ############# Bash-it ##############
 git clone --depth=1 https://github.com/Bash-it/bash-it.git ~/.bash_it
 ~/.bash_it/install.sh --none
-if [ -h ~/.bash_profile ]; then
-    rm -f ~/.bash_profile
+if [ -h ~/.bashrc ]; then
+    rm -f ~/.bashrc
 fi
-if [ -f ~/.bash_profile ]; then
-    mv --backup ~/.bash_profile ~/.bash_profile.bak
+if [ -f ~/.bashrc ]; then
+    mv --backup ~/.bashrc ~/.bashrc.bak
 fi
-ln -s ~/dotfiles/home/.bash_profile ~/
+ln -s ~/dotfiles/home/bashrc ~/.bashrc
 source ~/.bash_it/bash_it.sh 2>/dev/null
 # Aliases
 bash-it enable alias ansible
@@ -56,7 +56,7 @@ fi
 if [ -f ~/.vimrc ]; then
     mv --backup ~/.vimrc ~/.vimrc.bak
 fi
-ln -s ~/dotfiles/home/.vimrc ~/
+ln -s ~/dotfiles/home/vimrc ~/.vimrc
 sudo sh -c "echo TERM=xterm-256color >> /etc/environment"
 git clone https://github.com/gmarik/vundle.git ~/.vim/bundle/vundle
 sudo aptitude install exuberant-ctags
@@ -71,4 +71,4 @@ fi
 if [ -f ~/.tmux.conf ]; then
     mv --backup ~/.tmux.conf ~/.tmux.conf.bak
 fi
-ln -s ~/dotfiles/home/.tmux.conf ~/
+ln -s ~/dotfiles/home/tmux.conf ~/.tmux.conf
