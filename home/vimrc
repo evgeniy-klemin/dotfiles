@@ -29,6 +29,7 @@ Bundle "wookiehangover/jshint.vim"
 "---------------=== Helpers ===-----------------------
 Bundle 'scrooloose/nerdcommenter'
 Bundle 'jpalardy/vim-slime'
+Bundle 'tpope/vim-fugitive'
 "-----------------=== Syntax ===----------------------
 Bundle 'jelera/vim-javascript-syntax'
 Bundle 'digitaltoad/vim-jade'
