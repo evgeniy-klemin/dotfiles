@@ -225,6 +225,10 @@ cmap w!! w !sudo tee % >/dev/null
 nmap yw viwy
 nmap pw viwp
 
+" tab navigation
+nmap <S-h> :tabprevious<CR>
+nmap <S-l> :tabnext<CR>
+
 "=====================================================
 " Plugins
 "=====================================================
