@@ -1,22 +1,11 @@
 #!/usr/bin/env bash
 
-
-########################### Custom ##########################
-
-export BASH_IT_THEME='envy'
-export EDITOR=vim
-export GIT_EDITOR=vim
-alias tmux="TERM=screen-256color-bce tmux"
-
-
-######################### Bash-it default ########################
-
 # Path to the bash it configuration
 export BASH_IT="$HOME/.bash_it"
 
 # Lock and Load a custom theme file
 # location /.bash_it/themes/
-export BASH_IT_THEME='bobby'
+export BASH_IT_THEME='pure'
 
 # Your place for hosting Git repos. I use this for private repos.
 export GIT_HOSTING='git@git.domain.com'
