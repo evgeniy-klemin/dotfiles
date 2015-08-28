@@ -71,7 +71,7 @@ let JSHintUpdateWriteOnly=1
 set ruler " show the cursor pos
 set rulerformat=%30(%=\:b%n%y%m%r%w\ %l,%c%V\ %P%)
 set completeopt-=preview " don't show docs on the top
-set gcr=a:blinkon0
+set guicursor=a:blinkon0 " Disable all blinking
 set cursorline " highlight current line
 set ttyfast " Improves redrawing
 set scrolloff=5 " always have at least 5 lines before the window's bottom
@@ -95,6 +95,8 @@ augroup vimrc_autocmds
 augroup END
 
 let g:nerdtree_tabs_open_on_console_startup = 1
+let g:nerdtree_tabs_meaningful_tab_names = 1
+let g:nerdtree_tabs_focus_on_files = 1
 let NERDTreeIgnore=['\~$', '\.pyc$', '\.pyo$']
 
 au BufRead,BufNewFile *.html set filetype=htmldjango
@@ -120,6 +122,7 @@ set mousemodel=extend " Enable mouse support
 "set selectmode=mouse
 set mousefocus
 set mouse=a
+set timeoutlen=300
 
 "=====================================================
 " Backup options
@@ -179,7 +182,7 @@ let g:airline_branch_prefix = '⎇ '
 let g:airline_paste_symbol = 'ρ'
 let g:airline_detect_modified=1
 let g:airline_detect_paste=1
-let g:airline_powerline_fonts = 1
+let g:airline_powerline_fonts = 0
 "let g:airline#extensions#tabline#enabled = 0
 "let g:airline#extensions#tabline#formatter = 'unique_tail'
 set noshowmode
@@ -188,20 +191,14 @@ set noshowmode
 "=====================================================
 " Key mapping
 "=====================================================
-:nmap <F5> :set mouse=a<CR>:set nopaste<CR>:set number<CR>
-:nmap <F6> :set mouse=c<CR>:set paste<CR>:set nonumber<CR>
-:imap <F5> <Esc>:set mouse=a<CR>:set nopaste<CR>:set number<CR>
-:imap <F6> <Esc>:set mouse=c<CR>:set paste<CR>:set nonumber<CR>
-:cmap <F5> <Esc><Esc>:set mouse=a<CR>:set nopaste<CR>:set number<CR>
-:cmap <F6> <Esc><Esc>:set mouse=c<CR>:set paste<CR>:set nonumber<CR>
-:map <F7> :set number!<CR>
+map <F7> :set number!<CR>
 
 " add new line before or after cursor
 nmap oo o<Esc>k
 nmap OO O<Esc>j
 
 map <C-n> :NERDTreeTabsToggle<CR>
-nmap <F8> :TagbarToggle<CR>
+nmap <S-t> :TagbarToggle<CR>
 
 " Autoformat
 autocmd FileType javascript noremap <buffer> <c-f> :call JsBeautify()<cr>
@@ -222,13 +219,44 @@ inoremap <C-space> <C-x><C-o>
 " Save as sudo
 cmap w!! w !sudo tee % >/dev/null
 
-" Copy and past word
-nmap yw viwy
-nmap pw viwp
+" Copy and past word, using buffer 1
+nmap yw viw"1y
+nmap pw viw"1p
+" Copy and past visual selection using buffer 1
+vnoremap y "1y
+vnoremap p "1p
 
 " tab navigation
 nmap <S-h> :tabprevious<CR>
 nmap <S-l> :tabnext<CR>
+
+" remap Ex mode to exit
+nmap <S-q> :q<CR>
+
+"=====================================================
+" Auto paste detect
+"=====================================================
+function! WrapForTmux(s)
+  if !exists('$TMUX')
+    return a:s
+  endif
+
+  let tmux_start = "\<Esc>Ptmux;"
+  let tmux_end = "\<Esc>\\"
+
+  return tmux_start . substitute(a:s, "\<Esc>", "\<Esc>\<Esc>", 'g') . tmux_end
+endfunction
+
+let &t_SI .= WrapForTmux("\<Esc>[?2004h")
+let &t_EI .= WrapForTmux("\<Esc>[?2004l")
+
+function! XTermPasteBegin()
+  set pastetoggle=<Esc>[201~
+  set paste
+  return ""
+endfunction
+
+inoremap <special> <expr> <Esc>[200~ XTermPasteBegin()
 
 "=====================================================
 " Plugins
