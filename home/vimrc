@@ -40,7 +40,7 @@ Bundle 'mustache/vim-mustache-handlebars'
 Bundle 'ekalinin/Dockerfile.vim'
 Bundle 'godlygeek/tabular'
 Bundle 'plasticboy/vim-markdown'
-Bundle 'chase/vim-ansible-yaml'
+Bundle 'pearofducks/ansible-vim'
 Bundle 'Glench/Vim-Jinja2-Syntax'
 "------------------=== Other ===----------------------
 Bundle 'bling/vim-airline'
