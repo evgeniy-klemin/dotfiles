@@ -30,6 +30,7 @@ Bundle "wookiehangover/jshint.vim"
 Bundle 'scrooloose/nerdcommenter'
 Bundle 'jpalardy/vim-slime'
 Bundle 'tpope/vim-fugitive'
+Bundle 'tpope/vim-surround'
 "-----------------=== Syntax ===----------------------
 Bundle 'jelera/vim-javascript-syntax'
 Bundle 'digitaltoad/vim-jade'
@@ -92,6 +93,7 @@ augroup vimrc_autocmds
     autocmd FileType python,javascript highlight OverLength ctermfg=red
     autocmd FileType python,javascript match OverLength /\%80v.\+/
     autocmd FileType python,javascript set nowrap
+    autocmd FileType javascript,js highlight SpellBad cterm=bold ctermbg=0
 augroup END
 
 let g:nerdtree_tabs_open_on_console_startup = 1
@@ -199,6 +201,8 @@ nmap OO O<Esc>j
 
 map <C-n> :NERDTreeTabsToggle<CR>
 nmap <S-t> :TagbarToggle<CR>
+" go to file in NERDTree
+nmap f :NERDTreeFind<CR>
 
 " Autoformat
 autocmd FileType javascript noremap <buffer> <c-f> :call JsBeautify()<cr>
