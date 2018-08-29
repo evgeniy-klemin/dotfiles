@@ -20,12 +20,9 @@ Bundle 'garbas/vim-snipmate'
 Bundle 'honza/vim-snippets'
 "--------------=== Languages support ===--------------
 " --- Python ---
-Bundle 'klen/python-mode'
-Bundle 'davidhalter/jedi-vim'
+"Bundle 'davidhalter/jedi-vim'
 " --- JavaScript ---
-Bundle 'maksimr/vim-jsbeautify'
-Bundle 'einars/js-beautify'
-Bundle "wookiehangover/jshint.vim"
+Bundle "w0rp/ale"
 "---------------=== Helpers ===-----------------------
 Bundle 'scrooloose/nerdcommenter'
 Bundle 'jpalardy/vim-slime'
@@ -87,11 +84,11 @@ colorscheme monokai
 set encoding=utf-8
 set number "nu - Line numbers on
 
-" highlight more the 80 columns
+" highlight more the 88 columns
 augroup vimrc_autocmds
     autocmd!
     autocmd FileType python,javascript highlight OverLength ctermfg=red
-    autocmd FileType python,javascript match OverLength /\%80v.\+/
+    autocmd FileType python,javascript match OverLength /\%88v.\+/
     autocmd FileType python,javascript set nowrap
     autocmd FileType javascript,js highlight SpellBad cterm=bold ctermbg=0
 augroup END
@@ -123,7 +120,7 @@ set incsearch " show the `best match so far' as search strings are typed:
 set mousemodel=extend " Enable mouse support
 "set selectmode=mouse
 set mousefocus
-set mouse=a
+set mouse=c
 set timeoutlen=300
 
 "=====================================================
@@ -137,25 +134,25 @@ set backup               " enable backups
 " Python-mode
 "=====================================================
 " disable autocompleat, use instead jedi-vim
-let g:pymode_rope = 0
-let g:pymode_rope_completion = 0
-let g:pymode_rope_complete_on_dot = 0
-" docs
-let g:pymode_doc = 0
-let g:pymode_doc_key = 'K'
-" code check
-let g:pymode_lint = 1
-let g:pymode_lint_checker = "pyflakes,pep8"
-let g:pymode_lint_ignore="E501,W601,C0110"
-let g:pymode_lint_write = 1
-" syntax
-let g:pymode_syntax = 1
-let g:pymode_syntax_all = 1
-let g:pymode_syntax_indent_errors = g:pymode_syntax_all
-let g:pymode_syntax_space_errors = g:pymode_syntax_all
-" other
-let g:pymode_folding = 0
-let g:pymode_virtualenv = 1
+"let g:pymode_rope = 0
+"let g:pymode_rope_completion = 0
+"let g:pymode_rope_complete_on_dot = 0
+"" docs
+"let g:pymode_doc = 0
+"let g:pymode_doc_key = 'K'
+"" code check
+"let g:pymode_lint = 1
+"let g:pymode_lint_checker = "pyflakes,pep8"
+"let g:pymode_lint_ignore="E501,W601,C0110"
+"let g:pymode_lint_write = 1
+"" syntax
+"let g:pymode_syntax = 1
+"let g:pymode_syntax_all = 1
+"let g:pymode_syntax_indent_errors = g:pymode_syntax_all
+"let g:pymode_syntax_space_errors = g:pymode_syntax_all
+"" other
+"let g:pymode_folding = 0
+"let g:pymode_virtualenv = 1
 
 "smart ident
 autocmd BufRead *.py set smartindent cinwords=if,elif,else,for,while,try,except,finally,def,class
@@ -205,7 +202,7 @@ nmap <S-t> :TagbarToggle<CR>
 nmap f :NERDTreeFind<CR>
 
 " Autoformat
-autocmd FileType javascript noremap <buffer> <c-f> :call JsBeautify()<cr>
+"autocmd FileType javascript noremap <buffer> <c-f> :call JsBeautify()<cr>
 " for html
 autocmd FileType html noremap <buffer> <c-f> :call HtmlBeautify()<cr>
 " for css or scss
@@ -266,6 +263,17 @@ inoremap <special> <expr> <Esc>[200~ XTermPasteBegin()
 " Plugins
 "=====================================================
 let g:slime_target = "tmux"
+let g:ale_linters = {
+\    'python': ['flake8'],
+\    'javascript': ['eslint'],
+\}
+let g:ale_fixers = {
+\    'python': ['black', 'isort', 'remove_trailing_lines', 'trim_whitespace'],
+\    'javascript': ['eslint'],
+\}
+let g:ale_fix_on_save = 1
+let g:airline#extensions#ale#enabled = 1
+
 
 map ё `
 map й q
