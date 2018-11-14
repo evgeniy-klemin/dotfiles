@@ -42,6 +42,7 @@ Bundle 'pearofducks/ansible-vim'
 Bundle 'Glench/Vim-Jinja2-Syntax'
 "------------------=== Other ===----------------------
 Bundle 'bling/vim-airline'
+Bundle 'localvimrc'
 
 
 "=====================================================
@@ -344,3 +345,5 @@ map Ь M
 map Б <
 map Ю >
 map , ?
+
+let g:localvimrc_ask=0
