@@ -13,6 +13,7 @@ Bundle 'jistr/vim-nerdtree-tabs'
 Bundle 'majutsushi/tagbar'
 "--------------=== Color scheme  ===------------------
 Bundle 'sickill/vim-monokai'
+Bundle 'ryanoasis/vim-devicons'
 "--------------=== Snippets support ===---------------
 Bundle 'MarcWeber/vim-addon-mw-utils'
 Bundle 'tomtom/tlib_vim'
@@ -20,7 +21,6 @@ Bundle 'garbas/vim-snipmate'
 Bundle 'honza/vim-snippets'
 "--------------=== Languages support ===--------------
 " --- Python ---
-"Bundle 'davidhalter/jedi-vim'
 " --- JavaScript ---
 Bundle "w0rp/ale"
 "---------------=== Helpers ===-----------------------
@@ -30,9 +30,7 @@ Bundle 'tpope/vim-fugitive'
 Bundle 'tpope/vim-surround'
 "-----------------=== Syntax ===----------------------
 Bundle 'jelera/vim-javascript-syntax'
-Bundle 'digitaltoad/vim-jade'
 Bundle 'elzr/vim-json'
-Bundle 'vim-coffee-script'
 Bundle 'vim-less'
 Bundle 'mustache/vim-mustache-handlebars'
 Bundle 'ekalinin/Dockerfile.vim'
@@ -42,9 +40,8 @@ Bundle 'pearofducks/ansible-vim'
 Bundle 'Glench/Vim-Jinja2-Syntax'
 Bundle 'mechatroner/rainbow_csv'
 "------------------=== Other ===----------------------
-Bundle 'vim-airline/vim-airline'
-Bundle 'ryanoasis/vim-devicons'
 Bundle 'localvimrc'
+Bundle 'vim-airline/vim-airline'
 Bundle 'ycm-core/YouCompleteMe'
 
 
@@ -136,30 +133,6 @@ set backupdir=~/tmp,/tmp " backups (~)
 set directory=~/tmp,/tmp " swap files
 set backup               " enable backups
 
-"=====================================================
-" Python-mode
-"=====================================================
-" disable autocompleat, use instead jedi-vim
-"let g:pymode_rope = 0
-"let g:pymode_rope_completion = 0
-"let g:pymode_rope_complete_on_dot = 0
-"" docs
-"let g:pymode_doc = 0
-"let g:pymode_doc_key = 'K'
-"" code check
-"let g:pymode_lint = 1
-"let g:pymode_lint_checker = "pyflakes,pep8"
-"let g:pymode_lint_ignore="E501,W601,C0110"
-"let g:pymode_lint_write = 1
-"" syntax
-"let g:pymode_syntax = 1
-"let g:pymode_syntax_all = 1
-"let g:pymode_syntax_indent_errors = g:pymode_syntax_all
-"let g:pymode_syntax_space_errors = g:pymode_syntax_all
-"" other
-"let g:pymode_folding = 0
-"let g:pymode_virtualenv = 1
-
 "smart ident
 autocmd BufRead *.py set smartindent cinwords=if,elif,else,for,while,try,except,finally,def,class
 
@@ -179,14 +152,6 @@ set shortmess+=filmnrxoOtT " abbrev. of messages (avoids 'hit enter')
 "=====================================================
 " Aireline
 "=====================================================
-"let g:airline_theme='dark'
-"let g:airline_enable_branch=1
-"let g:airline_enable_syntastic=1
-"let g:airline_linecolumn_prefix = '¶ '
-"let g:airline_branch_prefix = '⎇ '
-"let g:airline_paste_symbol = 'ρ'
-"let g:airline_detect_modified=1
-"let g:airline_detect_paste=1
 let g:airline_powerline_fonts = 1 "enable powerline fonts support
 let g:airline#extensions#keymap#enabled = 0 "dont show current mapping
 let g:airline_section_z = "\ue0a1:%l/%L Col:%c" "custom cursor section
@@ -212,7 +177,6 @@ nmap <S-t> :TagbarToggle<CR>
 nmap f :NERDTreeFind<CR>
 
 " Autoformat
-"autocmd FileType javascript noremap <buffer> <c-f> :call JsBeautify()<cr>
 " for html
 autocmd FileType html noremap <buffer> <c-f> :call HtmlBeautify()<cr>
 " for css or scss
