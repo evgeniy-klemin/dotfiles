@@ -4,45 +4,55 @@ filetype off                  " required
 "=====================================================
 " Vundle settings
 "=====================================================
-set rtp+=~/.vim/bundle/vundle/
-call vundle#rc()
-Bundle 'gmarik/vundle'
+set rtp+=~/.vim/bundle/Vundle.vim
+call vundle#begin()
+
+Plugin 'VundleVim/Vundle.vim'
 "---------=== Code/project navigation ===-------------
-Bundle 'scrooloose/nerdtree'
-Bundle 'jistr/vim-nerdtree-tabs'
-Bundle 'majutsushi/tagbar'
+Plugin 'scrooloose/nerdtree'
+Plugin 'jistr/vim-nerdtree-tabs'
+Plugin 'majutsushi/tagbar'
 "--------------=== Color scheme  ===------------------
-Bundle 'sickill/vim-monokai'
-Bundle 'ryanoasis/vim-devicons'
+Plugin 'sickill/vim-monokai'
+Plugin 'ryanoasis/vim-devicons'
 "--------------=== Snippets support ===---------------
-Bundle 'MarcWeber/vim-addon-mw-utils'
-Bundle 'tomtom/tlib_vim'
-Bundle 'garbas/vim-snipmate'
-Bundle 'honza/vim-snippets'
+Plugin 'MarcWeber/vim-addon-mw-utils'
+Plugin 'tomtom/tlib_vim'
+Plugin 'garbas/vim-snipmate'
+Plugin 'honza/vim-snippets'
+Plugin 'Shougo/neosnippet.vim'
+Plugin 'Shougo/neosnippet-snippets'
 "--------------=== Languages support ===--------------
-" --- Python ---
-" --- JavaScript ---
-Bundle "w0rp/ale"
+Plugin 'dense-analysis/ale'
+Plugin 'fatih/vim-go'
+Plugin 'ctrlpvim/ctrlp.vim'
 "---------------=== Helpers ===-----------------------
-Bundle 'scrooloose/nerdcommenter'
-Bundle 'jpalardy/vim-slime'
-Bundle 'tpope/vim-fugitive'
-Bundle 'tpope/vim-surround'
+Plugin 'scrooloose/nerdcommenter'
+Plugin 'jpalardy/vim-slime'
+Plugin 'tpope/vim-fugitive'
+Plugin 'tpope/vim-surround'
 "-----------------=== Syntax ===----------------------
-Bundle 'jelera/vim-javascript-syntax'
-Bundle 'elzr/vim-json'
-Bundle 'vim-less'
-Bundle 'mustache/vim-mustache-handlebars'
-Bundle 'ekalinin/Dockerfile.vim'
-Bundle 'godlygeek/tabular'
-Bundle 'plasticboy/vim-markdown'
-Bundle 'pearofducks/ansible-vim'
-Bundle 'Glench/Vim-Jinja2-Syntax'
-Bundle 'mechatroner/rainbow_csv'
+Plugin 'jelera/vim-javascript-syntax'
+Plugin 'leafgarland/typescript-vim'
+Plugin 'elzr/vim-json'
+Plugin 'vim-less'
+Plugin 'mustache/vim-mustache-handlebars'
+Plugin 'ekalinin/Dockerfile.vim'
+Plugin 'godlygeek/tabular'
+Plugin 'pearofducks/ansible-vim'
+Plugin 'Glench/Vim-Jinja2-Syntax'
+Plugin 'mechatroner/rainbow_csv'
+Plugin 'posva/vim-vue'
+Plugin 'willyrgf/vim-opensips'
+Plugin 'google/vim-jsonnet'
+Plugin 'uarun/vim-protobuf'
 "------------------=== Other ===----------------------
-Bundle 'localvimrc'
-Bundle 'vim-airline/vim-airline'
-Bundle 'ycm-core/YouCompleteMe'
+Plugin 'localvimrc'
+Plugin 'vim-airline/vim-airline'
+Plugin 'suan/vim-instant-markdown', {'rtp': 'after'}
+"Plugin 'ycm-core/YouCompleteMe'
+call vundle#end()
+filetype plugin indent on
 
 
 "=====================================================
@@ -141,7 +151,6 @@ autocmd BufWritePre *.py normal m`:%s/\s\+$//e ``
 
 "filetype on
 "filetype plugin on
-filetype plugin indent on
 
 set showcmd " show partial commands in status line and
 set laststatus=1
@@ -236,15 +245,47 @@ inoremap <special> <expr> <Esc>[200~ XTermPasteBegin()
 "=====================================================
 " Plugins
 "=====================================================
+
+let deoplete#enable_at_startup = 1
+let deoplete#enable_ignore_case = 1
+
+call ale#linter#Define('go' {
+\    'name': 'gobuild',
+\    'output_stream': 'both',
+\    'executable': 'go',
+\    'read_buffer': 0,
+\    'command': 'go build -o /dev/null %t',
+\    'callback': 'ale#handlers#unix#HandleAsWarning',
+\})
+
 let g:slime_target = "tmux"
 let g:ale_linters = {
 \    'python': ['flake8'],
 \    'javascript': ['eslint'],
+\    'typescript': ['eslint'],
+\    'vue': ['eslint'],
+\    'go': ['gobuild', 'golangci-lint'],
 \}
 let g:ale_fixers = {
 \    'python': ['black', 'isort', 'remove_trailing_lines', 'trim_whitespace'],
-\    'javascript': ['eslint'],
+\    'javascript': ['eslint', 'remove_trailing_lines', 'trim_whitespace'],
+\    'typescript': ['eslint', 'remove_trailing_lines', 'trim_whitespace'],
+\    'vue': ['eslint'],
+\    'go': ['gomod', 'goimports'],
 \}
+"\    'go': ['gomod', 'goimports'],
+
+let g:ale_go_golangci_lint_options = ''
+let g:ale_go_golangci_lint_package = 1
+
+let g:go_highlight_types = 1
+let g:go_highlight_functions = 1
+let g:go_highlight_operators = 1
+let g:go_auto_type_info = 1
+let g:go_auto_sameids = 1
+
+set updatetime=100
+
 let g:ale_fix_on_save = 1
 let g:airline#extensions#ale#enabled = 1
 
