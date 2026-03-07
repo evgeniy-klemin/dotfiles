@@ -17,7 +17,27 @@ Personal dotfiles for macOS managed with [GNU Stow](https://www.gnu.org/software
 - [Homebrew](https://brew.sh/)
 - GNU Stow: `brew install stow`
 - [Zap](https://github.com/zap-zsh/zap) plugin manager
-- `brew install starship lsd fzf ranger`
+
+```bash
+brew install starship lsd fzf ranger neovim
+```
+
+| Tool | Purpose |
+|------|---------|
+| [starship](https://starship.rs/) | Cross-shell prompt |
+| [lsd](https://github.com/lsd-rs/lsd) | Modern `ls` replacement (used in `ls`/`ll`/`lt` aliases); requires a [Nerd Font](https://www.nerdfonts.com/) |
+| [fzf](https://github.com/junegunn/fzf) | Fuzzy finder (`~/.fzf.zsh` keybindings) |
+| [ranger](https://ranger.github.io/) | Terminal file manager (wrapped in `rng` function) |
+| [neovim](https://neovim.io/) | Editor (`vim`/`vimdiff` aliases point to `nvim`) |
+
+**Optional** (completions are loaded automatically if installed):
+
+| Tool | Purpose |
+|------|---------|
+| `kubectl` | Kubernetes CLI |
+| `docker` | Docker CLI |
+| `temporal` | Temporal workflow CLI |
+| `tctl` | Temporal server CLI |
 
 ## Install
 
