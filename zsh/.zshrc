@@ -1,75 +1,46 @@
-# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
-# Initialization code that may require console input (password prompts, [y/n]
-# confirmations, etc.) must go above this block; everything else may go below.
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
+# Zap plugin manager
+[ -f "${XDG_DATA_HOME:-$HOME/.local/share}/zap/zap.zsh" ] && source "${XDG_DATA_HOME:-$HOME/.local/share}/zap/zap.zsh"
 
-# If you come from bash you might have to change your $PATH.
-# export PATH=$HOME/bin:/usr/local/bin:$PATH
+# Plugins
+plug "zsh-users/zsh-autosuggestions"
+plug "zsh-users/zsh-syntax-highlighting"
+plug "zsh-users/zsh-completions"
+plug "zap-zsh/sudo"
 
-# Path to your oh-my-zsh installation.
-export ZSH=$HOME/.oh-my-zsh
+# Completions
+autoload -U compinit && compinit
+command -v kubectl &>/dev/null && source <(kubectl completion zsh)
+command -v docker &>/dev/null && source <(docker completion zsh)
+command -v temporal &>/dev/null && source <(temporal completion zsh)
+command -v tctl &>/dev/null && autoload -U +X bashcompinit && bashcompinit && source <(tctl completion zsh)
 
-# Set name of the theme to load. Optionally, if you set this to "random"
-# it'll load a random theme each time that oh-my-zsh is loaded.
-# See https://github.com/robbyrussell/oh-my-zsh/wiki/Themes
-ZSH_THEME="powerlevel10k/powerlevel10k"
+# Options
+setopt correct              # auto-correct commands
+setopt prompt_sp            # preserve partial line output
+ZLE_RPROMPT_INDENT=0        # no right prompt indent
+setopt auto_cd              # cd by typing directory name
+setopt hist_ignore_all_dups # no duplicate history entries
+setopt share_history        # share history between sessions
+HISTSIZE=10000
+SAVEHIST=10000
+HISTFILE=~/.zsh_history
 
-DEFAULT_USER="eklemin"
-
-POWERLEVEL9K_INSTANT_PROMPT=off
-
-# DISABLE_AUTO_UPDATE="true"
-DISABLE_UPDATE_PROMPT="true"
-
-export UPDATE_ZSH_DAYS=30
-DISABLE_AUTO_TITLE="true"
-ENABLE_CORRECTION="true"
-COMPLETION_WAITING_DOTS="true"
-plugins=(
-  git
-  kubectl
-  colored-man-pages
-  colorize
-  command-not-found
-  copybuffer
-  docker
-  docker-compose
-  golang
-  # helm
-  virtualenv
-  yarn
-  django
-  sudo
-  autoupdate
-  zsh-syntax-highlighting
-)
-
-source $ZSH/oh-my-zsh.sh
-
-# Preferred editor for local and remote sessions
+# Editor
 if [[ -n $SSH_CONNECTION ]]; then
   export EDITOR='vim'
 else
   export EDITOR='nvim'
 fi
 
-export GOROOT="/usr/local/go"
+# PATH
 export GOPATH="$HOME/projects/go"
-export PATH="$GOROOT/bin:$GOPATH/bin:$PATH"
-
-alias python="python3"
-
-# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-export PATH="/usr/local/opt/openjdk/bin:$PATH"
-
-autoload -U compinit && compinit
-command -v temporal &>/dev/null && source <(temporal completion zsh)
-command -v tctl &>/dev/null && source <(tctl completion zsh)
+export PATH="$GOPATH/bin:$PATH"
+[ -d "/opt/homebrew/opt/openjdk/bin" ] && export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
+[ -d "/usr/local/opt/openjdk/bin" ] && export PATH="/usr/local/opt/openjdk/bin:$PATH"
+export PATH="$PATH:$HOME/.local/bin"
 
 # Aliases
+alias python="python3"
 alias icat='kitty +kitten icat'
 alias ls='lsd'
 alias l='ls -Ah'
@@ -77,7 +48,8 @@ alias ll='ls -lAh'
 alias lt='ls --tree'
 alias vim='nvim'
 alias vimdiff='nvim -d'
-# git aliases
+
+# Git aliases
 alias gs='git status -sb'
 alias gl='git lg'
 alias gpl='git pull'
@@ -85,28 +57,58 @@ alias gp='git push'
 alias gd='git diff'
 alias gdt='git difftool -t nvimdiff -y'
 
-precmd () {print -Pn "\e]0;%~\a"}
-
-# Created by `pipx` on 2023-12-30 15:37:02
-export PATH="$PATH:/Users/eklemin/.local/bin"
-
-# ranger
+# Ranger: cd to last visited dir on exit
 function rng {
     local IFS=$'\t\n'
     local tempfile="$(mktemp -t tmp.XXXXXX)"
     local ranger_cmd=(
         command
         ranger
-        --cmd="map Q chain shell echo %d > "$tempfile"; quitall"
+        --cmd="map Q chain shell echo %d > '$tempfile'; quitall"
     )
     ${ranger_cmd[@]} "$@"
-    if [[ -f "$tempfile" ]] && [[ "$(cat -- "$tempfile")" != "$(echo -n `pwd`)" ]]; then
+    if [[ -f "$tempfile" ]] && [[ "$(cat -- "$tempfile")" != "$(pwd)" ]]; then
         cd -- "$(cat "$tempfile")"; clear || return
     fi
     command rm -f -- "$tempfile" 2>/dev/null
 }
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+# Starship prompt
+eval "$(starship init zsh)"
+
+
+# Transient prompt: collapse previous prompt, print duration if >= 3s
+zmodload zsh/datetime
+_tp_cmd_start=0
+
+_tp_preexec() { _tp_cmd_start=$EPOCHREALTIME }
+
+_tp_precmd() {
+  if (( _tp_cmd_start > 0 )); then
+    local ms=$(( (EPOCHREALTIME - _tp_cmd_start) * 1000 ))
+    _tp_cmd_start=0
+    if (( ms >= 3000 )); then
+      print "$(starship module cmd_duration --cmd-duration=${ms%.*})"
+    fi
+  fi
+  PROMPT='$(starship prompt)'
+}
+
+precmd_functions=(_tp_precmd $precmd_functions)
+preexec_functions+=(_tp_preexec)
+
+zle-line-finish() {
+  PROMPT="%B%F{green}❯%f%b "
+  RPROMPT="%F{242}%D{%H:%M:%S}%f"
+  zle reset-prompt
+  RPROMPT=""
+}
+zle -N zle-line-finish
+
+# Redraw prompt on terminal resize
+TRAPWINCH() { zle && zle reset-prompt }
 
 # Local overrides (not tracked in dotfiles)
 [ -f ~/.zshrc.local ] && source ~/.zshrc.local

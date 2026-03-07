@@ -1,0 +1,141 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+palette = "nord"
+
+format = """
+$os\
+$directory\
+$git_branch\
+$git_status\
+${custom.dir_cap}\
+${custom.git_cap}\
+$golang\
+$python\
+$lua\
+$nodejs\
+$docker_context\
+$kubernetes\
+$fill\
+$cmd_duration\
+$time\
+$line_break\
+$character"""
+
+
+[fill]
+symbol = " "
+
+# OS — start of chain
+[os]
+disabled = false
+format = "[ $symbol ](bold fg:snow bg:polar_night)"
+
+[os.symbols]
+Macos = ""
+
+[character]
+success_symbol = "[❯](bold fg:frost_green)"
+error_symbol = "[❯](bold fg:aurora_red)"
+vimcmd_symbol = "[❮](bold fg:frost_green)"
+vimcmd_replace_one_symbol = "[❮](bold fg:aurora_purple)"
+vimcmd_replace_symbol = "[❮](bold fg:aurora_purple)"
+
+# Directory — transitions from OS
+[directory]
+format = "[](fg:polar_night bg:frost_blue)[ $path$read_only ](bold fg:polar_dark bg:frost_blue)"
+truncation_length = 4
+truncate_to_repo = true
+read_only = " "
+home_symbol = "  ~"
+
+[directory.substitutions]
+"Documents" = " "
+"Downloads" = " "
+"projects" = " "
+
+# Git branch — transitions from Dir
+[git_branch]
+format = "[](fg:frost_blue bg:aurora_green)[  $branch ](bold fg:polar_dark bg:aurora_green)"
+
+# Git status — transitions from Git branch, rounded end cap
+[git_status]
+format = '([](fg:aurora_green bg:aurora_orange)[ $all_status$ahead_behind ](bold fg:polar_dark bg:aurora_orange)[](fg:aurora_orange))'
+ahead = "⇡${count}"
+behind = "⇣${count}"
+diverged = "⇡${ahead_count}⇣${behind_count}"
+conflicted = "=${count}"
+untracked = "?${count}"
+stashed = "*${count}"
+modified = "!${count}"
+staged = "+${count}"
+deleted = "✘${count}"
+
+[golang]
+format = "[](fg:frost_cyan)[  ($version) ](bold fg:polar_dark bg:frost_cyan)[](fg:frost_cyan)"
+
+[python]
+format = "[](fg:aurora_yellow)[  ${pyenv_prefix}(${version} )((${virtualenv}) )](bold fg:polar_dark bg:aurora_yellow)[](fg:aurora_yellow)"
+
+[lua]
+format = "[](fg:frost_blue)[  ($version) ](bold fg:polar_dark bg:frost_blue)[](fg:frost_blue)"
+
+[nodejs]
+format = "[](fg:aurora_green)[  ($version) ](bold fg:polar_dark bg:aurora_green)[](fg:aurora_green)"
+
+[kubernetes]
+disabled = false
+format = "[](fg:aurora_purple)[ ☸ $context( ($namespace)) ](bold fg:polar_dark bg:aurora_purple)[](fg:aurora_purple)"
+
+[docker_context]
+format = "[](fg:frost_deep)[  $context ](bold fg:snow bg:frost_deep)[](fg:frost_deep)"
+
+[cmd_duration]
+min_time = 3_000
+format = "[](fg:aurora_yellow)[  $duration ](bold fg:polar_dark bg:aurora_yellow)[](fg:aurora_yellow)"
+
+[time]
+disabled = false
+format = "[](fg:polar_night)[  $time](bold fg:snow bg:polar_night)[](fg:polar_night)"
+time_format = "%H:%M"
+
+# Rounded end cap for directory when not in a git repo
+[custom.dir_cap]
+when = "! git rev-parse --is-inside-work-tree 2>/dev/null"
+format = "[](fg:frost_blue)"
+
+# Rounded end cap for git_branch when git status is clean
+[custom.git_cap]
+when = "git rev-parse --is-inside-work-tree 2>/dev/null && test -z \"$(git status --porcelain 2>/dev/null)\" && test -z \"$(git stash list 2>/dev/null)\" && ! git status -sb 2>/dev/null | head -1 | grep -q '\\['"
+format = "[](fg:aurora_green)"
+
+[username]
+format = "[](fg:polar_night)[ $user ](bold fg:snow bg:polar_night)[](fg:polar_night)"
+show_always = false
+
+[hostname]
+ssh_only = true
+format = "[](fg:polar_night)[ @$hostname ](bold fg:snow bg:polar_night)[](fg:polar_night)"
+
+# Nord palette
+[palettes.nord]
+# Polar Night
+polar_dark = "#2E3440"
+polar_night = "#3B4252"
+polar_bright = "#434C5E"
+polar_light = "#4C566A"
+# Snow Storm
+snow_dim = "#D8DEE9"
+snow = "#E5E9F0"
+snow_bright = "#ECEFF4"
+# Frost
+frost_cyan = "#8FBCBB"
+frost_blue = "#81A1C1"
+frost_light = "#88C0D0"
+frost_deep = "#5E81AC"
+frost_green = "#A3BE8C"
+# Aurora
+aurora_green = "#A3BE8C"
+aurora_orange = "#FFB86C"
+aurora_yellow = "#EBCB8B"
+aurora_red = "#BF616A"
+aurora_purple = "#BD93F9"
