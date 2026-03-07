@@ -7,7 +7,7 @@ Personal dotfiles for macOS managed with [GNU Stow](https://www.gnu.org/software
 | Package | Files |
 |---------|-------|
 | `kitty` | `.config/kitty/kitty.conf` |
-| `nvim`  | `.config/nvim/` (Lua-based neovim config) |
+| `nvim`  | `.config/nvim/` (Lua-based neovim config) — [details](nvim/.config/nvim/README.md) |
 
 ## Requirements
 
