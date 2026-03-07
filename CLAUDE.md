@@ -4,6 +4,7 @@
 
 - `home/` — legacy configs symlinked manually via `install.sh` (zshrc, tmux, vim)
 - `kitty/` — kitty terminal config managed via GNU Stow
+- `nvim/` — neovim config (Lua-based) managed via GNU Stow
 - `install.sh` — legacy install script (apt-get based, Linux only)
 
 ## Conventions
