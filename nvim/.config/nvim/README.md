@@ -58,6 +58,10 @@ Triggered manually with `Ctrl-Space` (autocomplete is off by default). Sources b
 | path | `[Path]` | File path completions |
 | buffer | `[Buffer]` | Words from open buffers (fallback when no LSP) |
 
+Command line completion (cmp-cmdline):
+- `:` — command and path completion (`Ctrl-N`/`Ctrl-P` navigate, `Tab` confirm)
+- `/` and `?` — buffer word completion for search
+
 ## Key mappings
 
 | Key | Mode | Action |
