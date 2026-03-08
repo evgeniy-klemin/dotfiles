@@ -23,11 +23,12 @@ cd ~/dotfiles
 ```
 
 The setup script checks and installs all dependencies:
-- **Brew**: stow, starship, lsd, fzf, ranger, neovim, node, ripgrep, imagemagick, luarocks
+- **Brew**: stow, starship, lsd, fzf, ranger, neovim, node, ripgrep, git-delta, imagemagick, luarocks
 - **Zap**: zsh plugin manager (autosuggestions, syntax-highlighting, completions)
 - **npm**: tree-sitter-cli, neovim
 - **Luarocks**: magick (image.nvim)
 - **Python**: pynvim (neovim provider), pylint (linter)
+- **Git**: delta configured as diff pager (side-by-side, syntax highlighting)
 - **Stow**: symlinks all packages to `$HOME`
 
 ## Adding new packages

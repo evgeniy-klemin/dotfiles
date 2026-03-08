@@ -67,11 +67,14 @@ end
 M.tool_installer_opts = function()
     return {
         ensure_installed = {
-            "prettier", -- prettier formatter
-            "stylua", -- lua formatter
-            "isort", -- python formatter
-            "black", -- python formatter
-            "pylint", -- python linter
+            "prettier",
+            "stylua",
+            "isort",
+            "black",
+            "pylint",
+            "gofumpt",
+            "goimports-reviser",
+            "golines",
         },
     }
 end

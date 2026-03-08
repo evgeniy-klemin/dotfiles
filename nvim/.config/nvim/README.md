@@ -100,7 +100,11 @@ Command line completion (cmp-cmdline):
 
 **UI:** monokai theme, lualine, bufferline, neo-tree, alpha (start screen), indent-blankline, nvim-ufo (folds), gitsigns, nvim-notify, statuscol, which-key, virt-column
 
-**LSP:** mason + mason-lspconfig + mason-tool-installer, nvim-lspconfig, none-ls (formatting/linting via prettier, stylua, isort, black, pylint)
+**LSP:** mason + mason-lspconfig + mason-tool-installer, nvim-lspconfig
+
+**Formatting:** conform.nvim (prettier, stylua, isort, black, gofumpt, goimports-reviser, golines) — format-on-save
+
+**Linting:** nvim-lint (pylint)
 
 **AI suggestions:** windsurf.vim (Codeium inline ghost text)
 

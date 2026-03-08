@@ -81,7 +81,9 @@ end, s_opts("Toggle Neotree"))
 map("n", "f", "<cmd>Neotree reveal_force_cwd<CR>", s_opts("Reveal current file in Neotree"))
 
 -- Format
-map("n", "<Leader>fm", "<cmd>Format<CR>", s_opts("Format file"))
+map("n", "<Leader>fm", function()
+    require("conform").format({ async = true, lsp_format = "fallback" })
+end, s_opts("Format file"))
 
 -- Fold
 map('n', 'zR', require('ufo').openAllFolds, s_opts("Open all folds"))

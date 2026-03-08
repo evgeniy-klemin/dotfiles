@@ -21,7 +21,8 @@
 - **LSP**: mason.nvim + native `vim.lsp.config`/`vim.lsp.enable` (nvim 0.11+)
 - **Completion**: nvim-cmp (manual trigger via `<C-Space>`) + cmp-cmdline (`:` and `/` completion)
 - **AI inline suggestions**: windsurf.vim (Codeium) — `<Tab>` accept, `<M-]>`/`<M-[>` cycle
-- **Formatting/linting**: none-ls (null-ls) with prettier, stylua, isort, black, pylint
+- **Formatting**: conform.nvim with prettier, stylua, isort, black, gofumpt, goimports-reviser, golines
+- **Linting**: nvim-lint with pylint
 - **Fuzzy finder**: FzfLua (requires fzf + ripgrep)
 - **Treesitter**: nvim-treesitter v2 (`require('nvim-treesitter')`)
 - **Folds**: nvim-ufo

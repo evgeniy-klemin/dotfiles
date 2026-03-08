@@ -153,9 +153,15 @@ return {
         'neovim/nvim-lspconfig',
     },
     {
-        'nvimtools/none-ls.nvim',
-        requires = { 'nvim-lua/plenary.nvim', 'neovim/nvim-lspconfig' },
-        opts = function() return require('plugins.config.lsp_null_ls').opts end,
+        'stevearc/conform.nvim',
+        event = { "BufWritePre" },
+        cmd = { "ConformInfo" },
+        opts = require('plugins.config.format_conform').opts,
+    },
+    {
+        'mfussenegger/nvim-lint',
+        event = { "BufEnter", "BufWritePost", "InsertLeave" },
+        config = require('plugins.config.lint_nvimlint').config,
     },
     -- }}}
     ---------------------------------------------------------------------------

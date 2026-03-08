@@ -46,6 +46,7 @@ check_brew_pkg ranger "ranger (file manager)"
 check_brew_pkg nvim "neovim"
 check_brew_pkg node "node.js"
 check_brew_pkg rg "ripgrep"
+check_brew_pkg delta "git-delta (diff pager)"
 check_brew_pkg convert "imagemagick"
 
 if command -v luarocks &>/dev/null; then
@@ -58,6 +59,20 @@ fi
 if [ ${#MISSING_BREW[@]} -gt 0 ]; then
     info "Installing missing brew packages: ${MISSING_BREW[*]}"
     brew install "${MISSING_BREW[@]}"
+fi
+
+# -------------------------------------------------------------------
+info "Git delta config"
+if git config --global --get core.pager | grep -q delta; then
+    ok "delta already configured as git pager"
+else
+    git config --global core.pager delta
+    git config --global interactive.diffFilter "delta --color-only"
+    git config --global delta.navigate true
+    git config --global delta.side-by-side true
+    git config --global delta.line-numbers true
+    git config --global delta.syntax-theme "Monokai Extended"
+    ok "delta configured (side-by-side, line numbers, Monokai theme)"
 fi
 
 # -------------------------------------------------------------------
@@ -98,7 +113,7 @@ fi
 
 # -------------------------------------------------------------------
 info "Luarocks packages"
-if luarocks show magick 2>/dev/null | grep -q "magick"; then
+if luarocks --lua-dir="$(brew --prefix luajit)" list magick 2>/dev/null | grep -q "installed"; then
     ok "magick luarock"
 else
     warn "magick luarock not found — installing"
