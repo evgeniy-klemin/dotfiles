@@ -2,7 +2,7 @@ local M = {}
 
 M.config = function()
     vim.cmd [[TSUpdate]]
-    require('nvim-treesitter.configs').setup {
+    require('nvim-treesitter').setup {
         ensure_installed = {
             "go",
             "python",

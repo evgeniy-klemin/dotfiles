@@ -41,6 +41,9 @@ vim.o.relativenumber = true
 -- Always have at least 5 lines before the window's bottom
 vim.o.scrolloff = 5
 
+-- Required for nvim-cmp
+vim.o.completeopt = "menu,menuone,noselect"
+
 -- Timeout for command
 vim.o.timeout = true
 vim.o.timeoutlen = 300

@@ -17,7 +17,7 @@ M.opts = {
         }),
         null_ls.builtins.formatting.black,
         null_ls.builtins.formatting.isort,
-        null_ls.builtins.diagnostics.flake8.with({
+        null_ls.builtins.diagnostics.pylint.with({
             prefer_local = "venv/bin",
         }),
         null_ls.builtins.code_actions.gitsigns,

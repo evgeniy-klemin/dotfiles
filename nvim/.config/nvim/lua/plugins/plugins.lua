@@ -19,7 +19,6 @@ return {
         dependencies = { 'tanvirtin/monokai.nvim' },
         config = require('plugins.config.ui_notify').config,
     },
-    { 'preservim/tagbar' },
     {
         -- start screen
         'goolord/alpha-nvim',
@@ -165,109 +164,53 @@ return {
     ---------------------------------------------------------------------------
     -- Autocomplete {{{
     ---------------------------------------------------------------------------
-    -- { 'github/copilot.vim' },
     {
-        'zbirenbaum/copilot.lua',
-        config = function()
-            require("copilot").setup({
-                suggestion = {
-                    auto_trigger = true,
-                    keymap = {
-                      accept = false,
-                      accept_word = false,
-                      accept_line = false,
-                      next = "<C-]>",
-                      prev = "<C-[>",
-                      dismiss = "<C-x>",
-                    },
-                },
-            })
-            -- super tab - accept suggestion or do normal tab
-            vim.keymap.set("i", '<Tab>', function()
-              if require("copilot.suggestion").is_visible() then
-                require("copilot.suggestion").accept()
-              else
-                vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Tab>", true, false, true), "n", false)
-              end
-            end, {
-              silent = true,
-            })
-        end,
-    },
-    {
-        "zbirenbaum/copilot-cmp",
-        dependencies = { 'zbirenbaum/copilot.lua' },
-        config = function () require("copilot_cmp").setup() end,
+        'Exafunction/windsurf.vim',
+        event = 'BufEnter',
     },
     {
     "hrsh7th/nvim-cmp",
     event = "InsertEnter",
     dependencies = {
-      "zbirenbaum/copilot-cmp",
-      {
-        -- snippet plugin
-        "L3MON4D3/LuaSnip",
-        dependencies = "rafamadriz/friendly-snippets",
-        opts = { history = true, updateevents = "TextChanged,TextChangedI" },
-        config = function(_, opts)
-          require('plugins.config.autocomplete_cmp').luasnip(opts)
-          vim.api.nvim_set_hl(0, "CmpItemKindCopilot", {fg ="#6CC644"})
-        end,
-      },
-
-      -- autopairing of (){}[] etc
-      -- {
-      --   "windwp/nvim-autopairs",
-      --   opts = {
-      --     fast_wrap = {},
-      --     disable_filetype = { "TelescopePrompt", "vim" },
-      --   },
-      --   config = function(_, opts)
-      --     require("nvim-autopairs").setup(opts)
-      --
-      --     -- setup cmp for autopairs
-      --     local cmp_autopairs = require "nvim-autopairs.completion.cmp"
-      --     require("cmp").event:on("confirm_done", cmp_autopairs.on_confirm_done())
-      --   end,
-      -- },
-
-
-      -- tabnine autocomplete
-      {
-         'tzachar/cmp-tabnine',
-         build = './install.sh',
-         dependencies = 'hrsh7th/nvim-cmp',
-         config = function()
-            require('cmp_tabnine.config'):setup({
-                max_lines = 1000,
-                max_num_results = 20,
-                sort = true,
-                run_on_every_keystroke = true,
-                snippet_placeholder = '..',
-                ignored_file_types = {
-                    -- default is not to ignore
-                    -- uncomment to ignore in lua:
-                    -- lua = true
-                },
-                show_prediction_strength = false
-            })
-         end,
-     },
-
       -- cmp sources plugins
       {
-        "saadparwaiz1/cmp_luasnip",
         "hrsh7th/cmp-nvim-lua",
         "hrsh7th/cmp-nvim-lsp",
         "hrsh7th/cmp-buffer",
         "hrsh7th/cmp-path",
+        "hrsh7th/cmp-cmdline",
       },
     },
     opts = function()
       return require('plugins.config.autocomplete_cmp').opts
     end,
     config = function(_, opts)
-        require("cmp").setup(opts)
+        local cmp = require("cmp")
+        cmp.setup(opts)
+
+        local cmdline_mapping = cmp.mapping.preset.cmdline({
+            ['<C-Space>'] = { c = cmp.mapping.complete() },
+            ['<Tab>'] = { c = cmp.mapping.confirm({ select = true }) },
+        })
+
+        -- `/` and `?` search completion
+        cmp.setup.cmdline({ '/', '?' }, {
+            mapping = cmdline_mapping,
+            sources = {
+                { name = 'buffer' },
+            },
+        })
+
+        -- `:` command line completion
+        cmp.setup.cmdline(':', {
+            mapping = cmdline_mapping,
+            sources = cmp.config.sources({
+                { name = 'path' },
+            }, {
+                { name = 'cmdline' },
+            }),
+            matching = { disallow_symbol_nonprefix_matching = false },
+        })
     end,
   },
     -- }}}

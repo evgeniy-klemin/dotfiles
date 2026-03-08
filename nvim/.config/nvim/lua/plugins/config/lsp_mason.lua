@@ -2,15 +2,12 @@ local M = {}
 
 M.config = function()
     require('mason').setup()
+    require('lspconfig') -- register lspconfig's lsp/ configs for vim.lsp.config
 
-    -- config for lspconfig
     local capabilities = require('cmp_nvim_lsp').default_capabilities()
 
-    require("lspconfig").gopls.setup{
+    vim.lsp.config('gopls', {
         capabilities = capabilities,
-        cmd = {"gopls"},
-        filetypes = {"go", "gomod", "gowork", "gotmpl"},
-        root_dir = require("lspconfig/util").root_pattern("go.work", "go.mod", ".git"),
         settings = {
             gopls = {
                 experimentalPostfixCompletions = true,
@@ -27,14 +24,13 @@ M.config = function()
             usePlaceholders = true,
             completeUnimported = true,
         },
-    }
+    })
+    vim.lsp.enable('gopls')
 
-    require("lspconfig").pyright.setup{
+    vim.lsp.config('pyright', {
         capabilities = capabilities,
         settings = {
-            pyright = {
-                autoImportCompletion = true,
-            },
+            pyright = { autoImportCompletion = true },
             python = {
                 pythonPath = 'venv/bin/python',
                 venvPath = '.',
@@ -42,11 +38,12 @@ M.config = function()
                     autoSearchPaths = true,
                     diagnosticMode = 'openFilesOnly',
                     useLibraryCodeForTypes = true,
-                    typeCheckingMode = 'off'
-                }
-            }
+                    typeCheckingMode = 'off',
+                },
+            },
         },
-    }
+    })
+    vim.lsp.enable('pyright')
 
     local opts = { noremap = true, silent = true }
     vim.api.nvim_set_keymap("n", "gd", "<cmd>lua vim.lsp.buf.definition()<CR>", opts)
@@ -74,7 +71,7 @@ M.tool_installer_opts = function()
             "stylua", -- lua formatter
             "isort", -- python formatter
             "black", -- python formatter
-            "flake8", -- js linter
+            "pylint", -- python linter
         },
     }
 end

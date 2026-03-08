@@ -11,24 +11,6 @@ autocmd("BufEnter", {
     pattern = "*",
 })
 
--- auto toggle tagbar on file enter
-group = augroup("open_tagbar", { clear = true })
-autocmd("BufWinEnter", {
-    callback = function()
-        vim.cmd('TagbarOpen')
-    end,
-    desc = "Open Tagbar on file enter.",
-    group = group,
-    pattern = { "*.go", "*.py" },
-})
-autocmd("BufWinLeave", {
-    callback = function()
-        vim.cmd('TagbarClose')
-    end,
-    desc = "Close Tagbar on file exit.",
-    group = group,
-    pattern = { "*.go", "*.py" },
-})
 
 group = augroup("clean_onsave", { clear = true })
 autocmd("BufWritePre", {

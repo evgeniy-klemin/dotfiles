@@ -13,6 +13,26 @@ end
 -- remap Ex mode to exit
 map("n", "Q", "<cmd>q<CR>", s_opts("Exit"))
 
+-- Windsurf (Codeium) keymaps
+map("i", "<Tab>", function()
+    return vim.fn["codeium#Accept"]()
+end, { noremap = true, expr = true, silent = true })
+
+map("i", "<M-]>", function()
+    return vim.fn["codeium#CycleCompletions"](1)
+end, { noremap = true, expr = true, silent = true })
+
+map("i", "<M-[>", function()
+    return vim.fn["codeium#CycleCompletions"](-1)
+end, { noremap = true, expr = true, silent = true })
+
+map("i", "<Esc>", function()
+    if vim.fn.exists("*codeium#Clear") == 1 then
+        vim.fn["codeium#Clear"]()
+    end
+    return "<Esc>"
+end, { noremap = true, expr = true, silent = true })
+
 -- open terminal in popup
 map("n", "<Leader><Leader>t", function()
     vim.cmd [[FloatermToggle]]
@@ -62,9 +82,6 @@ map("n", "f", "<cmd>Neotree reveal_force_cwd<CR>", s_opts("Reveal current file i
 
 -- Format
 map("n", "<Leader>fm", "<cmd>Format<CR>", s_opts("Format file"))
-
--- Tagbar toggle
-map("n", "<Leader>tt", "<cmd>TagbarToggle<CR>", s_opts("Toggle Tagbar"))
 
 -- Fold
 map('n', 'zR', require('ufo').openAllFolds, s_opts("Open all folds"))

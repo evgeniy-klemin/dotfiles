@@ -24,7 +24,7 @@ M.opts = {
         },
     },
   completion = {
-    -- completeopt = "menu,menuone",
+    autocomplete = false,
   },
   window = {
     completion = {
@@ -39,21 +39,20 @@ M.opts = {
   },
   snippet = {
     expand = function(args)
-      require("luasnip").lsp_expand(args.body)
+      vim.snippet.expand(args.body)
     end,
   },
   formatting = {
       fields = { "abbr", "kind", "menu" },
       format = lspkind.cmp_format({
           mode = 'symbol_text', -- show only symbol annotations
-          -- menu = ({
-          --     buffer = "[Buffer]",
-          --     nvim_lsp = "[LSP]",
-          --     luasnip = "[LuaSnip]",
-          --     nvim_lua = "[Lua]",
-          --     copilot = "[Copilot]",
-          --     cmp_tabnine = "[TabNine]",
-          -- }),
+          menu = {
+              buffer = "[Buffer]",
+              nvim_lsp = "[LSP]",
+              nvim_lua = "[Lua]",
+              codeium = "[Windsurf]",
+              path = "[Path]",
+          },
           maxwidth = 50, -- prevent the popup from showing more than provided characters (e.g 50 will not show more than 50 characters)
                          -- can also be a function to dynamically calculate max width such as
                          -- maxwidth = function() return math.floor(0.45 * vim.o.columns) end,
@@ -74,38 +73,13 @@ M.opts = {
     ["<C-d>"] = cmp.mapping.scroll_docs(-4),
     ["<C-f>"] = cmp.mapping.scroll_docs(4),
     ["<C-Space>"] = cmp.mapping.complete(),
-    ["<Esc>"] = cmp.mapping(function(fallback)
-        cmp.mapping.close()
-        fallback()
-    end, { "i", "s" }),
     ["<CR>"] = cmp.mapping.confirm {
       behavior = cmp.ConfirmBehavior.Insert,
       select = true,
     },
-    ["<Tab>"] = cmp.mapping(function(fallback)
-      if cmp.visible() then
-        fallback()
-      elseif require("luasnip").expand_or_jumpable() then
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<Plug>luasnip-expand-or-jump", true, true, true), "")
-      else
-        fallback()
-      end
-    end, { "i", "s", }),
-    ["<S-Tab>"] = cmp.mapping(function(fallback)
-      if cmp.visible() then
-        fallback()
-      elseif require("luasnip").jumpable(-1) then
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<Plug>luasnip-jump-prev", true, true, true), "")
-      else
-        fallback()
-      end
-    end, { "i", "s", }),
   },
   sources = cmp.config.sources({
     { name = "nvim_lsp" },
-    { name = "copilot" },
-    { name = "luasnip" },
-    { name = 'cmp_tabnine' },
     { name = "nvim_lua" },
     { name = "path" },
   }, {
@@ -122,8 +96,6 @@ M.opts = {
   sorting = {
     priority_weight = 2,
     comparators = {
-      require("copilot_cmp.comparators").prioritize,
-
       -- Below is the default comparitor list and order for nvim-cmp
       compare.offset,
       -- cmp.config.compare.scopes, --this is commented in nvim-cmp too
@@ -141,37 +113,10 @@ M.opts = {
   matching = {
       disallow_fuzzy_matching = true,
       disallow_fullfuzzy_matching = true,
-      disallow_partial_fuzzy_matching = true,
-      disallow_partial_matching = true,
-      disallow_prefix_unmatching = true,
+      disallow_partial_fuzzy_matching = false,
+      disallow_partial_matching = false,
+      disallow_prefix_unmatching = false,
   }
 }
-
-M.luasnip = function(opts)
-  require("luasnip").config.set_config(opts)
-
-  -- vscode format
-  require("luasnip.loaders.from_vscode").lazy_load()
-  require("luasnip.loaders.from_vscode").lazy_load { paths = vim.g.vscode_snippets_path or "" }
-
-  -- snipmate format
-  require("luasnip.loaders.from_snipmate").load()
-  require("luasnip.loaders.from_snipmate").lazy_load { paths = vim.g.snipmate_snippets_path or "" }
-
-  -- lua format
-  require("luasnip.loaders.from_lua").load()
-  require("luasnip.loaders.from_lua").lazy_load { paths = vim.g.lua_snippets_path or "" }
-
-  vim.api.nvim_create_autocmd("InsertLeave", {
-    callback = function()
-      if
-        require("luasnip").session.current_nodes[vim.api.nvim_get_current_buf()]
-        and not require("luasnip").session.jump_active
-      then
-        require("luasnip").unlink_current()
-      end
-    end,
-  })
-end
 
 return M

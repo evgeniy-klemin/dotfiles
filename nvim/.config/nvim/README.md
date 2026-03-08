@@ -4,14 +4,13 @@ Lua-based Neovim config for macOS + kitty terminal.
 
 Leader key: `.`
 
-## Screenshots 📷
+## Screenshots
 
 ![start](./screenshots/start.png)
-![copilot](./screenshots/code_copilot_suggest.png)
-![coc](./screenshots/code_coc_suggest.png)
+![code](./screenshots/code_copilot_suggest.png)
 ![search](./screenshots/search.png)
 
-## Installation 🛠
+## Installation
 
 Part of [dotfiles](https://github.com/evgeniy-klemin/dotfiles), installed via GNU Stow:
 
@@ -37,15 +36,37 @@ lua/
     config/              -- per-plugin configuration
 ```
 
+## AI code assistance — windsurf.vim (Codeium)
+
+Inline ghost text suggestions powered by Codeium. Shows multi-line suggestions as virtual text directly in the editor.
+
+| Key | Mode | Action |
+|-----|------|--------|
+| `Tab` | i | Accept suggestion |
+| `Alt-]` | i | Next suggestion |
+| `Alt-[` | i | Previous suggestion |
+| `Esc` | i | Clear suggestion + exit insert |
+
+## Completion menu (nvim-cmp)
+
+Triggered manually with `Ctrl-Space` (autocomplete is off by default). Sources by priority:
+
+| Source | Label | Description |
+|--------|-------|-------------|
+| nvim_lsp | `[LSP]` | Language server completions |
+| nvim_lua | `[Lua]` | Neovim Lua API completions |
+| path | `[Path]` | File path completions |
+| buffer | `[Buffer]` | Words from open buffers (fallback when no LSP) |
+
 ## Key mappings
 
 | Key | Mode | Action |
 |-----|------|--------|
 | `Q` | n | Quit |
-| `.ff` | n | Find files (fzf) |
-| `.fl` | n | Live grep (fzf) |
-| `.fgf` | n | Git files (fzf) |
-| `.fgb` | n | Git branches (fzf) |
+| `.ff` | n | Find files (FzfLua) |
+| `.fl` | n | Live grep (FzfLua, requires ripgrep) |
+| `.fgf` | n | Git files (FzfLua) |
+| `.fgb` | n | Git branches (FzfLua) |
 | `.fr` | n | Resume last search |
 | `Shift-F` | n | Toggle Neo-tree |
 | `f` | n | Reveal file in Neo-tree |
@@ -60,25 +81,36 @@ lua/
 | `Space Space` | n | Toggle fold |
 | `zR` / `zM` | n | Open/close all folds |
 | `.fm` | n | Format file |
-| `.tt` | n | Toggle Tagbar |
+| `gd` | n | Go to definition (LSP) |
+| `K` | n | Hover info (LSP) |
+| `.rn` | n | Rename symbol (LSP) |
+| `gl` | n | Show diagnostics float |
+| `yw` / `pw` | n | Copy/paste word under cursor (register 1) |
 | `.yf` | n/v | Yank file:line (relative) |
 | `.yF` | n/v | Yank file:line (absolute) |
-| `Tab` | i | Accept Copilot suggestion or normal tab |
+| `Ctrl-Space` | i | Open completion menu |
+| `Ctrl-P/N` | i | Navigate completion items |
+| `CR` | i | Confirm completion |
 
 ## Plugins
 
-**UI:** monokai theme, lualine, bufferline, neo-tree, alpha (start screen), indent-blankline, nvim-ufo (folds), gitsigns, nvim-notify, statuscol, which-key
+**UI:** monokai theme, lualine, bufferline, neo-tree, alpha (start screen), indent-blankline, nvim-ufo (folds), gitsigns, nvim-notify, statuscol, which-key, virt-column
 
-**LSP:** mason + mason-lspconfig, nvim-lspconfig, none-ls (formatting/linting)
+**LSP:** mason + mason-lspconfig + mason-tool-installer, nvim-lspconfig, none-ls (formatting/linting via prettier, stylua, isort, black, pylint)
 
-**Autocomplete:** nvim-cmp, copilot.lua, copilot-cmp, tabnine, LuaSnip
+**AI suggestions:** windsurf.vim (Codeium inline ghost text)
 
-**Syntax:** treesitter
+**Autocomplete:** nvim-cmp, cmp-cmdline, lspkind (icons)
 
-**Utils:** fzf-lua, vim-fugitive, Comment.nvim, vim-slime, floaterm, smart-splits, kitty-scrollback
+**Syntax:** nvim-treesitter
+
+**Utils:** fzf-lua (requires ripgrep), vim-fugitive, Comment.nvim, vim-slime, floaterm, smart-splits, kitty-scrollback, vim-startuptime
 
 ## Language support
 
-- Go
-- Python
-- Lua
+| Language | LSP server | Formatters / Linters |
+|----------|-----------|---------------------|
+| Go | gopls | golines, gofumpt, goimports-reviser |
+| Python | pyright | isort, black, pylint |
+| Lua | lua_ls | stylua |
+| JS/TS/HTML/CSS | — | prettier |
