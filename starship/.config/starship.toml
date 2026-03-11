@@ -84,7 +84,13 @@ format = "[](fg:aurora_green)[  ($version) ](bold fg:polar_dark bg:aurora_
 
 [kubernetes]
 disabled = false
-format = "[](fg:aurora_purple)[ ☸ $context( ($namespace)) ](bold fg:polar_dark bg:aurora_purple)[](fg:aurora_purple)"
+format = "[]($style)[ ☸ $context( ($namespace)) ](bold fg:polar_dark bg:$style)[]($style)"
+style = "aurora_purple"
+
+# Production — red background
+[[kubernetes.contexts]]
+context_pattern = "prod.*"
+style = "aurora_red"
 
 [docker_context]
 format = "[](fg:frost_deep)[  $context ](bold fg:snow bg:frost_deep)[](fg:frost_deep)"
