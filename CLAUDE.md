@@ -20,12 +20,29 @@
 
 - **LSP**: mason.nvim + native `vim.lsp.config`/`vim.lsp.enable` (nvim 0.11+)
 - **Completion**: nvim-cmp (manual trigger via `<C-Space>`) + cmp-cmdline (`:` and `/` completion)
-- **AI inline suggestions**: windsurf.vim (Codeium) — `<Tab>` accept, `<M-]>`/`<M-[>` cycle
+- **AI inline suggestions**: minuet-ai.nvim (local Ollama, JetBrains Mellum-4b) — `<Tab>` accept, `<A-a>` accept line, `<A-]>`/`<A-[>` cycle, `<A-e>` dismiss
 - **Formatting**: conform.nvim with prettier, stylua, isort, black, gofumpt, goimports-reviser, golines
 - **Linting**: nvim-lint with pylint
 - **Fuzzy finder**: FzfLua (requires fzf + ripgrep)
 - **Treesitter**: nvim-treesitter v2 (`require('nvim-treesitter')`)
 - **Folds**: nvim-ufo
+
+## Local AI code suggestions (Ollama)
+
+AI inline suggestions require a locally running Ollama instance with the JetBrains Mellum model:
+
+```bash
+brew install ollama
+brew services start ollama
+ollama pull JetBrains/Mellum-4b-sft-all
+```
+
+Ollama launchd plist (`/opt/homebrew/opt/ollama/homebrew.mxcl.ollama.plist`) is configured with:
+- `OLLAMA_KEEP_ALIVE=-1` — keeps model permanently loaded in GPU memory
+- `OLLAMA_FLASH_ATTENTION=1` — faster attention computation
+- `OLLAMA_KV_CACHE_TYPE=q8_0` — quantized KV cache to reduce memory usage
+
+Performance tuning (minuet config): `context_window=600`, `max_tokens=40` — optimized for ~1 sec response on M1 Pro (200 GB/s memory bandwidth). Prompt processing (prefill) is the main latency bottleneck.
 
 ## Running nvim checkhealth headless
 

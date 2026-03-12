@@ -171,12 +171,48 @@ return {
     -- Autocomplete {{{
     ---------------------------------------------------------------------------
     {
-        'Exafunction/windsurf.vim',
-        event = 'BufEnter',
+        'milanglacier/minuet-ai.nvim',
+        dependencies = { 'nvim-lua/plenary.nvim' },
+        lazy = false,
+        config = function()
+            require('minuet').setup {
+                provider = 'openai_fim_compatible',
+                n_completions = 1,
+                context_window = 600,
+                throttle = 300,
+                debounce = 200,
+                request_timeout = 10,
+                provider_options = {
+                    openai_fim_compatible = {
+                        api_key = function() return 'ollama' end,
+                        name = 'Ollama',
+                        stream = true,
+                        end_point = 'http://localhost:11434/v1/completions',
+                        model = 'JetBrains/Mellum-4b-sft-all',
+                        optional = {
+                            max_tokens = 40,
+                            top_p = 0.9,
+                            temperature = 0,
+                            num_ctx = 600,
+                        },
+                    },
+                },
+                virtualtext = {
+                    auto_trigger_ft = { '*' },
+                    keymap = {
+                        accept = false,
+                        accept_line = '<A-a>',
+                        prev = '<A-[>',
+                        next = '<A-]>',
+                        dismiss = '<A-e>',
+                    },
+                },
+            }
+        end,
     },
     {
     "hrsh7th/nvim-cmp",
-    event = "InsertEnter",
+    event = { "InsertEnter", "CmdlineEnter" },
     dependencies = {
       -- cmp sources plugins
       {
@@ -196,12 +232,21 @@ return {
 
         local cmdline_mapping = cmp.mapping.preset.cmdline({
             ['<C-Space>'] = { c = cmp.mapping.complete() },
-            ['<Tab>'] = { c = cmp.mapping.confirm({ select = true }) },
+            ['<C-n>'] = { c = cmp.mapping.select_next_item() },
+            ['<C-p>'] = { c = cmp.mapping.select_prev_item() },
+            ['<Tab>'] = { c = function()
+                if cmp.visible() then
+                    cmp.confirm({ select = true })
+                else
+                    cmp.complete()
+                end
+            end },
         })
 
         -- `/` and `?` search completion
         cmp.setup.cmdline({ '/', '?' }, {
             mapping = cmdline_mapping,
+            completion = { autocomplete = { require('cmp.types').cmp.TriggerEvent.TextChanged } },
             sources = {
                 { name = 'buffer' },
             },
@@ -210,6 +255,7 @@ return {
         -- `:` command line completion
         cmp.setup.cmdline(':', {
             mapping = cmdline_mapping,
+            completion = { autocomplete = { require('cmp.types').cmp.TriggerEvent.TextChanged } },
             sources = cmp.config.sources({
                 { name = 'path' },
             }, {

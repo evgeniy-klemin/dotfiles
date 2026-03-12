@@ -4,7 +4,7 @@
 
 OUTPUT="$HOME/nvim-ch.txt"
 
-HOME="$HOME" /usr/local/bin/nvim --headless -c 'lua vim.defer_fn(function()
+HOME="$HOME" nvim --headless -c 'lua vim.defer_fn(function()
   vim.cmd("checkhealth")
   vim.defer_fn(function()
     local buf = vim.api.nvim_get_current_buf()

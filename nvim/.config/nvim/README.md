@@ -36,16 +36,24 @@ lua/
     config/              -- per-plugin configuration
 ```
 
-## AI code assistance — windsurf.vim (Codeium)
+## AI code assistance — minuet-ai.nvim (local Ollama)
 
-Inline ghost text suggestions powered by Codeium. Shows multi-line suggestions as virtual text directly in the editor.
+Inline ghost text suggestions powered by a local LLM via Ollama (JetBrains Mellum-4b-sft-all). Shows multi-line suggestions as virtual text directly in the editor.
+
+Prerequisites:
+```bash
+brew install ollama
+brew services start ollama
+ollama pull JetBrains/Mellum-4b-sft-all
+```
 
 | Key | Mode | Action |
 |-----|------|--------|
-| `Tab` | i | Accept suggestion |
+| `Tab` | i | Accept suggestion (or insert Tab if no suggestion) |
+| `Alt-a` | i | Accept first line only |
 | `Alt-]` | i | Next suggestion |
 | `Alt-[` | i | Previous suggestion |
-| `Esc` | i | Clear suggestion + exit insert |
+| `Alt-e` | i | Dismiss suggestion |
 
 ## Completion menu (nvim-cmp)
 
@@ -58,8 +66,8 @@ Triggered manually with `Ctrl-Space` (autocomplete is off by default). Sources b
 | path | `[Path]` | File path completions |
 | buffer | `[Buffer]` | Words from open buffers (fallback when no LSP) |
 
-Command line completion (cmp-cmdline):
-- `:` — command and path completion (`Ctrl-N`/`Ctrl-P` navigate, `Tab` confirm)
+Command line completion (cmp-cmdline) — auto-triggers as you type:
+- `:` — command and path completion (`Ctrl-N`/`Ctrl-P` navigate, `Tab` confirm or trigger)
 - `/` and `?` — buffer word completion for search
 
 ## Key mappings
@@ -106,7 +114,7 @@ Command line completion (cmp-cmdline):
 
 **Linting:** nvim-lint (pylint)
 
-**AI suggestions:** windsurf.vim (Codeium inline ghost text)
+**AI suggestions:** minuet-ai.nvim (local Ollama + JetBrains Mellum-4b ghost text)
 
 **Autocomplete:** nvim-cmp, cmp-cmdline, lspkind (icons)
 

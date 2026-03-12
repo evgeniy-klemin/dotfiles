@@ -13,25 +13,16 @@ end
 -- remap Ex mode to exit
 map("n", "Q", "<cmd>q<CR>", s_opts("Exit"))
 
--- Windsurf (Codeium) keymaps
+-- Minuet AI: Tab accepts suggestion if visible, otherwise inserts normal Tab
 map("i", "<Tab>", function()
-    return vim.fn["codeium#Accept"]()
-end, { noremap = true, expr = true, silent = true })
-
-map("i", "<M-]>", function()
-    return vim.fn["codeium#CycleCompletions"](1)
-end, { noremap = true, expr = true, silent = true })
-
-map("i", "<M-[>", function()
-    return vim.fn["codeium#CycleCompletions"](-1)
-end, { noremap = true, expr = true, silent = true })
-
-map("i", "<Esc>", function()
-    if vim.fn.exists("*codeium#Clear") == 1 then
-        vim.fn["codeium#Clear"]()
+    local action = require('minuet.virtualtext').action
+    if action.is_visible() then
+        action.accept()
+        return ""
+    else
+        return "<Tab>"
     end
-    return "<Esc>"
-end, { noremap = true, expr = true, silent = true })
+end, { noremap = true, expr = true, silent = true, desc = "Accept AI suggestion or insert Tab" })
 
 -- open terminal in popup
 map("n", "<Leader><Leader>t", function()

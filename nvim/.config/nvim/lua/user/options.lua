@@ -44,6 +44,10 @@ vim.o.scrolloff = 5
 -- Required for nvim-cmp
 vim.o.completeopt = "menu,menuone,noselect"
 
+-- Use <C-z> for native wildmenu instead of Tab (Tab is used by cmp-cmdline)
+vim.o.wildcharm = ('<C-z>'):byte()
+vim.o.wildchar = 0
+
 -- Timeout for command
 vim.o.timeout = true
 vim.o.timeoutlen = 300

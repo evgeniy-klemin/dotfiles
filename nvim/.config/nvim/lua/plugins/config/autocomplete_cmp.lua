@@ -50,7 +50,7 @@ M.opts = {
               buffer = "[Buffer]",
               nvim_lsp = "[LSP]",
               nvim_lua = "[Lua]",
-              codeium = "[Windsurf]",
+
               path = "[Path]",
           },
           maxwidth = 50, -- prevent the popup from showing more than provided characters (e.g 50 will not show more than 50 characters)
