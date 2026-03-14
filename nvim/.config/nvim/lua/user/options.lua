@@ -95,6 +95,12 @@ vim.g.loaded_perl_provider = 0
 -- Disable ruby provider
 vim.g.loaded_ruby_provider = 0
 
+-- Auto-reload files changed outside of Neovim
+vim.o.autoread = true
+vim.api.nvim_create_autocmd({ "FocusGained", "CursorHold" }, {
+    command = "checktime",
+})
+
 -- Fold
 vim.o.foldcolumn = '1'
 vim.o.foldlevel = 99 -- Using ufo provider need a large value, feel free to decrease the value

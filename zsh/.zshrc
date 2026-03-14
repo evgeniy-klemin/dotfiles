@@ -40,6 +40,7 @@ export GOROOT="$(go env GOROOT 2>/dev/null)"
 [ -d "/opt/homebrew/opt/openjdk/bin" ] && export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
 [ -d "/usr/local/opt/openjdk/bin" ] && export PATH="/usr/local/opt/openjdk/bin:$PATH"
 export PATH="$PATH:$HOME/.local/bin"
+export PATH="/opt/homebrew/bin:$PATH"
 
 # LuaRocks (for neovim plugins like image.nvim)
 export LUA_PATH="$HOME/.luarocks/share/lua/5.1/?.lua;$HOME/.luarocks/share/lua/5.1/?/init.lua;;"

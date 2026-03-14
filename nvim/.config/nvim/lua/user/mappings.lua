@@ -71,6 +71,9 @@ map("n", "<S-f>", function()
 end, s_opts("Toggle Neotree"))
 map("n", "f", "<cmd>Neotree reveal_force_cwd<CR>", s_opts("Reveal current file in Neotree"))
 
+-- Toggle wrap
+map("n", "<Leader>tw", "<cmd>set wrap!<CR>", s_opts("Toggle line wrap"))
+
 -- Format
 map("n", "<Leader>fm", function()
     require("conform").format({ async = true, lsp_format = "fallback" })

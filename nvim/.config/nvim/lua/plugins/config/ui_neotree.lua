@@ -142,6 +142,15 @@ M.config = function()
     }
     require("neo-tree").setup(cfg)
 
+    -- Refresh neo-tree on external file changes (e.g. Claude Code in adjacent tmux pane)
+    vim.api.nvim_create_autocmd({ "FocusGained", "BufWritePost", "CursorHold" }, {
+        callback = function()
+            local manager = require("neo-tree.sources.manager")
+            pcall(manager.refresh, "filesystem")
+            pcall(manager.refresh, "git_status")
+        end,
+    })
+
     vim.api.nvim_create_autocmd("VimEnter", {
         callback = function()
             require("user.utils").toggle_neotree("source=filesystem")
