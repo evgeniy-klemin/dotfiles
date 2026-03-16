@@ -36,7 +36,6 @@ fi
 export GOPATH="$HOME/projects/go"
 export PATH="$GOPATH/bin:$PATH"
 export GOPROXY="https://proxy.golang.org,direct"
-export GOROOT="$(go env GOROOT 2>/dev/null)"
 [ -d "/opt/homebrew/opt/openjdk/bin" ] && export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
 [ -d "/usr/local/opt/openjdk/bin" ] && export PATH="/usr/local/opt/openjdk/bin:$PATH"
 export PATH="$PATH:$HOME/.local/bin"
