@@ -11,13 +11,9 @@ M.config = function()
         settings = {
             gopls = {
                 experimentalPostfixCompletions = true,
-                staticcheck = true,
+                staticcheck = false,
                 completeUnimported = true,
                 usePlaceholders = true,
-                analyses = {
-                    unusedparams = true,
-                    shadow = true,
-                },
             },
         },
         init_options = {
@@ -26,6 +22,11 @@ M.config = function()
         },
     })
     vim.lsp.enable('gopls')
+
+    vim.lsp.config('golangci_lint_ls', {
+        capabilities = capabilities,
+    })
+    vim.lsp.enable('golangci_lint_ls')
 
     vim.lsp.config('pyright', {
         capabilities = capabilities,
@@ -56,6 +57,7 @@ M.lspconfig_opts = function()
     return {
         ensure_installed = {
             'gopls',
+            'golangci_lint_ls',
             'lua_ls',
             -- python
             'pylsp',
