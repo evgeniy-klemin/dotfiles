@@ -7,9 +7,8 @@ M.config = function()
         segments = {
             { text = { builtin.foldfunc }, click = 'v:lua.ScFa' },
             {
-                sign = { name = { 'Diagnostic' }, maxwidth = 1, auto = true },
+                sign = { namespace = { 'diagnostic.signs' }, maxwidth = 1, auto = true },
                 click = 'v:lua.ScSa'
-
             },
             {
                 text = { builtin.lnumfunc },
@@ -18,10 +17,6 @@ M.config = function()
             {
                 sign = { namespace = { "gitsign*" }, maxwidth = 1 },
                 click = "v:lua.ScSa"
-            },
-            {
-              sign = { name = { "Dap" }, maxwidth = 1, auto = true },
-              click = "v:lua.ScSa",
             },
         }
     }

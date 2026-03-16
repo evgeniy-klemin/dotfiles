@@ -37,6 +37,8 @@ vim.o.incsearch = true
 vim.o.number = true
 -- Enable relative line numbers
 vim.o.relativenumber = true
+-- Minimal width for line number column
+vim.o.numberwidth = 1
 
 -- Always have at least 5 lines before the window's bottom
 vim.o.scrolloff = 5
