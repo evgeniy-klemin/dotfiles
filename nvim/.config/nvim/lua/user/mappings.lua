@@ -70,6 +70,43 @@ map("n", "<S-f>", function()
     utils.toggle_neotree("source=filesystem toggle=true")
 end, s_opts("Toggle Neotree"))
 map("n", "f", "<cmd>Neotree reveal_force_cwd<CR>", s_opts("Reveal current file in Neotree"))
+map("n", "<Leader>gb", function()
+    local function git_cmd(cmd)
+        local out = vim.fn.systemlist(cmd)
+        if vim.v.shell_error ~= 0 then return nil end
+        return out[1]
+    end
+    -- Detect default branch on remote (origin)
+    local base_ref
+    local symbolic = git_cmd("git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null")
+    if symbolic then
+        base_ref = symbolic:match("refs/remotes/(.+)")
+    end
+    if not base_ref then
+        if git_cmd("git rev-parse --verify origin/main 2>/dev/null") then
+            base_ref = "origin/main"
+        elseif git_cmd("git rev-parse --verify origin/master 2>/dev/null") then
+            base_ref = "origin/master"
+        end
+    end
+    if not base_ref then
+        vim.notify("Cannot determine base branch", vim.log.levels.WARN)
+        return
+    end
+    vim.g._neotree_git_base = base_ref
+    -- Switch to filesystem first to force neo-tree to re-navigate git_status
+    vim.cmd("Neotree source=filesystem")
+    vim.schedule(function()
+        vim.cmd("Neotree source=git_status git_base=" .. base_ref)
+    end)
+end, s_opts("Neotree: branch changes vs base"))
+map("n", "<Leader>gs", function()
+    vim.g._neotree_git_base = nil
+    vim.cmd("Neotree source=filesystem")
+    vim.schedule(function()
+        vim.cmd("Neotree source=git_status git_base=HEAD")
+    end)
+end, s_opts("Neotree: uncommitted changes"))
 
 -- Toggle wrap
 map("n", "<Leader>tw", "<cmd>set wrap!<CR>", s_opts("Toggle line wrap"))

@@ -142,10 +142,25 @@ M.config = function()
     }
     require("neo-tree").setup(cfg)
 
+    -- Skip git_status auto-refresh when custom git_base is active.
+    -- Neo-tree's git watcher fires GIT_EVENT every ~5s, calling manager.refresh()
+    -- which reloads git status and loses the custom git_base setting.
+    local manager = require("neo-tree.sources.manager")
+    local original_manager_refresh = manager.refresh
+    manager.refresh = function(source_name, callback)
+        if source_name == "git_status" and vim.g._neotree_git_base then
+            return
+        end
+        return original_manager_refresh(source_name, callback)
+    end
+
     -- Refresh neo-tree on external file changes (e.g. Claude Code in adjacent tmux pane)
+    -- Skip when git_status with custom git_base is active (would overwrite the sidebar)
     vim.api.nvim_create_autocmd({ "FocusGained", "BufWritePost", "CursorHold" }, {
         callback = function()
-            local manager = require("neo-tree.sources.manager")
+            if vim.g._neotree_git_base then
+                return
+            end
             pcall(manager.refresh, "filesystem")
             pcall(manager.refresh, "git_status")
         end,
