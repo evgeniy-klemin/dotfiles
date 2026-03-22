@@ -99,6 +99,10 @@ map("n", "<Leader>gb", function()
     vim.schedule(function()
         vim.cmd("Neotree source=git_status git_base=" .. base_ref)
     end)
+    -- Show gitsigns diff against base branch too
+    local gs = require("gitsigns")
+    gs.change_base(base_ref, true)
+    gs.toggle_current_line_blame(false)
 end, s_opts("Neotree: branch changes vs base"))
 map("n", "<Leader>gs", function()
     vim.g._neotree_git_base = nil
@@ -106,6 +110,10 @@ map("n", "<Leader>gs", function()
     vim.schedule(function()
         vim.cmd("Neotree source=git_status git_base=HEAD")
     end)
+    -- Reset gitsigns to default (HEAD)
+    local gs = require("gitsigns")
+    gs.reset_base(true)
+    gs.toggle_current_line_blame(true)
 end, s_opts("Neotree: uncommitted changes"))
 
 -- Toggle wrap
