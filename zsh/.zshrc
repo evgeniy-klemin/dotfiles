@@ -7,12 +7,38 @@ plug "zsh-users/zsh-syntax-highlighting"
 plug "zsh-users/zsh-completions"
 plug "zap-zsh/sudo"
 
-# Completions
-autoload -U compinit && compinit
-command -v kubectl &>/dev/null && source <(kubectl completion zsh)
-command -v docker &>/dev/null && source <(docker completion zsh)
-command -v temporal &>/dev/null && source <(temporal completion zsh)
-command -v tctl &>/dev/null && autoload -U +X bashcompinit && bashcompinit && source <(tctl completion zsh)
+# Completions — cached compinit (rebuild once per day)
+autoload -U compinit
+if [[ -f ~/.zcompdump(#qNmh+24) ]]; then
+  compinit
+else
+  compinit -C
+fi
+
+# Cached CLI completions — regenerate when binary changes
+_cache_completion() {
+  local cmd=$1 cache_file="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/completions/_$1"
+  local bin_path="${commands[$cmd]}"
+  [[ -z "$bin_path" ]] && return
+  if [[ ! -f "$cache_file" || "$bin_path" -nt "$cache_file" ]]; then
+    mkdir -p "${cache_file:h}"
+    "$cmd" completion zsh > "$cache_file" 2>/dev/null
+  fi
+  [[ -f "$cache_file" ]] && source "$cache_file"
+}
+_cache_completion kubectl
+_cache_completion docker
+_cache_completion temporal
+
+if command -v tctl &>/dev/null; then
+  autoload -U +X bashcompinit && bashcompinit
+  local tctl_cache="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/completions/_tctl"
+  if [[ ! -f "$tctl_cache" || "${commands[tctl]}" -nt "$tctl_cache" ]]; then
+    mkdir -p "${tctl_cache:h}"
+    tctl completion bash > "$tctl_cache" 2>/dev/null
+  fi
+  [[ -f "$tctl_cache" ]] && source "$tctl_cache"
+fi
 
 # Options
 setopt correct              # auto-correct commands
@@ -81,29 +107,23 @@ function rng {
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
-# Starship prompt
-eval "$(starship init zsh)"
+# Starship prompt — cached init to avoid extra starship spawn
+_starship_init="${XDG_CACHE_HOME:-$HOME/.cache}/starship/init.zsh"
+if [[ ! -f "$_starship_init" || "${commands[starship]}" -nt "$_starship_init" ]]; then
+  mkdir -p "${_starship_init:h}"
+  starship init zsh > "$_starship_init"
+fi
+source "$_starship_init"
 
+# Transient prompt: collapse previous prompts to a simple arrow
+_starship_prompt=$PROMPT
+_starship_rprompt=$RPROMPT
 
-# Transient prompt: collapse previous prompt, print duration if >= 3s
-zmodload zsh/datetime
-_tp_cmd_start=0
-
-_tp_preexec() { _tp_cmd_start=$EPOCHREALTIME }
-
-_tp_precmd() {
-  if (( _tp_cmd_start > 0 )); then
-    local ms=$(( (EPOCHREALTIME - _tp_cmd_start) * 1000 ))
-    _tp_cmd_start=0
-    if (( ms >= 3000 )); then
-      print "$(starship module cmd_duration --cmd-duration=${ms%.*})"
-    fi
-  fi
-  PROMPT='$(starship prompt)'
+_tp_restore_prompt() {
+  PROMPT=$_starship_prompt
+  RPROMPT=$_starship_rprompt
 }
-
-precmd_functions=(_tp_precmd $precmd_functions)
-preexec_functions+=(_tp_preexec)
+precmd_functions+=(_tp_restore_prompt)
 
 zle-line-finish() {
   PROMPT="%B%F{green}❯%f%b "

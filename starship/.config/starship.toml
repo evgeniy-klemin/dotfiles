@@ -7,8 +7,6 @@ $os\
 $directory\
 $git_branch\
 $git_status\
-${custom.dir_cap}\
-${custom.git_cap}\
 $golang\
 $python\
 $lua\
@@ -25,10 +23,9 @@ $character"""
 [fill]
 symbol = " "
 
-# OS — start of chain
 [os]
 disabled = false
-format = "[ $symbol ](bold fg:snow bg:polar_night)"
+format = "[](fg:polar_night)[ $symbol ](bold fg:snow bg:polar_night)[](fg:polar_night)"
 
 [os.symbols]
 Macos = ""
@@ -40,9 +37,8 @@ vimcmd_symbol = "[❮](bold fg:frost_green)"
 vimcmd_replace_one_symbol = "[❮](bold fg:aurora_purple)"
 vimcmd_replace_symbol = "[❮](bold fg:aurora_purple)"
 
-# Directory — transitions from OS
 [directory]
-format = "[](fg:polar_night bg:frost_blue)[ $path$read_only ](bold fg:polar_dark bg:frost_blue)"
+format = "[](fg:frost_blue)[ $path$read_only ](bold fg:polar_dark bg:frost_blue)[](fg:frost_blue)"
 truncation_length = 4
 truncate_to_repo = true
 read_only = " "
@@ -53,13 +49,11 @@ home_symbol = "  ~"
 "Downloads" = " "
 "projects" = " "
 
-# Git branch — transitions from Dir
 [git_branch]
-format = "[](fg:frost_blue bg:aurora_green)[  $branch ](bold fg:polar_dark bg:aurora_green)"
+format = "[](fg:aurora_green)[  $branch ](bold fg:polar_dark bg:aurora_green)[](fg:aurora_green)"
 
-# Git status — transitions from Git branch, rounded end cap
 [git_status]
-format = '([](fg:aurora_green bg:aurora_orange)[ $all_status$ahead_behind ](bold fg:polar_dark bg:aurora_orange)[](fg:aurora_orange))'
+format = '([](fg:aurora_orange)[ $all_status$ahead_behind ](bold fg:polar_dark bg:aurora_orange)[](fg:aurora_orange))'
 ahead = "⇡${count}"
 behind = "⇣${count}"
 diverged = "⇡${ahead_count}⇣${behind_count}"
@@ -103,16 +97,6 @@ format = "[](fg:aurora_yellow)[  $duration ](bold fg:polar_dark bg:aurora_
 disabled = false
 format = "[](fg:polar_night)[  $time](bold fg:snow bg:polar_night)[](fg:polar_night)"
 time_format = "%H:%M"
-
-# Rounded end cap for directory when not in a git repo
-[custom.dir_cap]
-when = "! git rev-parse --is-inside-work-tree 2>/dev/null"
-format = "[](fg:frost_blue)"
-
-# Rounded end cap for git_branch when git status is clean
-[custom.git_cap]
-when = "git rev-parse --is-inside-work-tree 2>/dev/null && test -z \"$(git status --porcelain 2>/dev/null)\" && test -z \"$(git stash list 2>/dev/null)\" && ! git status -sb 2>/dev/null | head -1 | grep -q '\\['"
-format = "[](fg:aurora_green)"
 
 [username]
 format = "[](fg:polar_night)[ $user ](bold fg:snow bg:polar_night)[](fg:polar_night)"
