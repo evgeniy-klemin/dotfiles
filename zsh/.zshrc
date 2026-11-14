@@ -7,6 +7,9 @@ plug "zsh-users/zsh-syntax-highlighting"
 plug "zsh-users/zsh-completions"
 plug "zap-zsh/sudo"
 
+# Custom completion functions (zsh/.config/zsh/completions in dotfiles)
+fpath=(~/.config/zsh/completions $fpath)
+
 # Completions — cached compinit (rebuild once per day)
 autoload -U compinit
 if [[ -f ~/.zcompdump(#qNmh+24) ]]; then
@@ -14,6 +17,9 @@ if [[ -f ~/.zcompdump(#qNmh+24) ]]; then
 else
   compinit -C
 fi
+
+# Register explicitly: `compinit -C` reuses a dump that may predate these files
+autoload -Uz _claude && compdef _claude claude
 
 # Cached CLI completions — regenerate when binary changes
 _cache_completion() {

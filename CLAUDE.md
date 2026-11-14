@@ -7,6 +7,7 @@
 - `tmux/` — tmux config managed via GNU Stow
 - `starship/` — starship prompt config managed via GNU Stow
 - `zsh/` — zshrc (zap + starship) managed via GNU Stow
+  - `zsh/.config/zsh/completions/` — custom completion functions (in `fpath`), e.g. `_claude` for the Claude Code CLI: parses `claude … --help` (cached in `~/.cache/zsh/claude-help`, refreshed when the binary changes) plus dynamic values (sessions, agents, MCP servers, plugins)
 - `scripts/` — helper scripts (not stowed)
 
 ## Conventions
