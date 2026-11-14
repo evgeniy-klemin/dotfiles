@@ -1,0 +1,378 @@
+#compdef claude
+# Zsh completion for the Claude Code CLI.
+#
+# Options and subcommands are parsed from `claude [cmd...] --help` and cached in
+# ~/.cache/zsh/claude-help (regenerated when the claude binary changes), so new
+# flags show up automatically after `claude update`.
+#
+# Dynamic values: --resume (sessions of the current dir), --agent, --model,
+# --tools, MCP server names, plugins, marketplaces, background sessions.
+
+# ---------------------------------------------------------------------------
+# help text cache
+
+(( $+functions[_claude_help] )) || _claude_help() {
+  # REPLY <- `claude "$@" --help`
+  local bin=${commands[claude]:A} key=${(j:_:)@}
+  local cache=${XDG_CACHE_HOME:-$HOME/.cache}/zsh/claude-help/${key:-root}.txt
+  [[ -n $bin ]] || return 1
+  if [[ ! -s $cache || $bin -nt $cache ]]; then
+    mkdir -p ${cache:h}
+    command claude "$@" --help </dev/null >|$cache 2>/dev/null
+    [[ -s $cache ]] || { command rm -f $cache; return 1 }
+  fi
+  REPLY="$(<$cache)"
+}
+
+# ---------------------------------------------------------------------------
+# description helpers
+
+(( $+functions[_claude_short] )) || _claude_short() {
+  # REPLY <- first sentence of $1 without choices/default notes, escaped for _arguments
+  setopt localoptions extendedglob
+  local d=${1//[[:space:]]##/ }
+  d=${d//[[:space:]]#\((choices|default|preset): [^\)]#\)/}
+  d=${d%%.\ [[:upper:]]*}
+  d=${${d%% #}%.}
+  (( $#d > 90 )) && d="${d[1,89]}…"
+  d=${d//\\/\\\\}; d=${d//\[/\\[}; d=${d//\]/\\]}
+  REPLY=$d
+}
+
+(( $+functions[_claude_choices] )) || _claude_choices() {
+  # reply <- value list mentioned in description $1:
+  #   (choices: "a", "b")  or a plain word list like (low, medium, high)
+  setopt localoptions extendedglob
+  local d=$1 rest grp
+  local -a toks
+  reply=()
+  if [[ $d == (#b)*\(choices:\ ([^\)]#)\)* ]]; then
+    toks=(${(s:, :)match[1]})
+    reply=(${${(M)toks:#\"*\"}//\"/})
+    return
+  fi
+  rest=$d
+  while [[ $rest == (#b)[^\(]#\(([^\)]#)\)(*) ]]; do
+    grp=$match[1] rest=$match[2]
+    toks=(${(s:,:)grp})
+    toks=(${toks##[[:space:]]#})
+    toks=(${${toks#or }#and })
+    toks=(${toks%%[[:space:]]#})
+    if (( $#toks >= 2 )) && [[ -z ${(M)toks:#(|*[^A-Za-z0-9_.-]*)} ]]; then
+      reply=($toks)
+      return
+    fi
+  done
+}
+
+# ---------------------------------------------------------------------------
+# value completers
+
+(( $+functions[_claude_models] )) || _claude_models() {
+  local -a m=(
+    'fable:latest Fable model'
+    'opus:latest Opus model'
+    'sonnet:latest Sonnet model'
+    'haiku:latest Haiku model'
+  )
+  _describe -t models 'model' m
+}
+
+(( $+functions[_claude_tools] )) || _claude_tools() {
+  local -a t=(
+    Agent AskUserQuestion Bash Edit Glob Grep LSP NotebookEdit Read Skill
+    WebFetch WebSearch Write default
+  )
+  _sequence -s , compadd - $t
+}
+
+(( $+functions[_claude_sessions] )) || _claude_sessions() {
+  # session ids of the current directory, newest first, with title / last prompt
+  local cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+  local dir=$cfg/projects/${PWD//[^A-Za-z0-9]/-}
+  local -a files=($dir/*.jsonl(N.om[1,40])) items when
+  local -A title
+  local l f v
+  (( $#files )) || { _message 'no sessions for this directory'; return 1 }
+  # "file<TAB>title" per session: custom title > AI title > last prompt
+  local re='^\{"type":"(custom-title|ai-title|last-prompt)"'
+  local -a grep=(command grep -H -E)
+  (( $+commands[rg] )) && grep=(command rg --no-config -H -N --no-heading -e)  # BSD grep is ~20x slower
+  for l in ${(f)"$($grep $re $files 2>/dev/null |
+    command awk '
+      match($0, /"(customTitle|aiTitle|lastPrompt)":"([^"\\]|\\.)*"/) {
+        f = substr($0, 1, index($0, ".jsonl:") - 1)
+        kv = substr($0, RSTART, RLENGTH)
+        k = substr(kv, 2, index(kv, "\":") - 2)
+        val[f, k] = substr(kv, length(k) + 5, length(kv) - length(k) - 5)
+        seen[f] = 1
+      }
+      END {
+        for (f in seen) {
+          t = val[f, "customTitle"]
+          if (t == "") t = val[f, "aiTitle"]
+          if (t == "") t = val[f, "lastPrompt"]
+          print f "\t" t
+        }
+      }')"}; do
+    title[${l%%$'\t'*}]=${l#*$'\t'}
+  done
+  zmodload -F zsh/stat b:zstat 2>/dev/null
+  for f in ${files%.jsonl}; do
+    v=${${title[$f]//\\n/ }//\\\"/\"}
+    (( $#v > 70 )) && v="${v[1,69]}…"
+    when=()
+    zstat -A when -F '%m-%d %H:%M' +mtime -- $f.jsonl 2>/dev/null
+    items+=("${f:t}:${when[1]}  ${v}")
+  done
+  _describe -V -t sessions 'session' items
+}
+
+(( $+functions[_claude_agent_names] )) || _claude_agent_names() {
+  setopt localoptions extendedglob
+  local cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude} f n d k p root
+  local -a items lns plugins
+  items=(
+    'general-purpose:built-in general-purpose agent'
+    'Explore:built-in read-only search agent'
+    'Plan:built-in planning agent'
+  )
+  root=$(command git rev-parse --show-toplevel 2>/dev/null)
+  _claude_agent_file() {  # $1=file $2=prefix
+    lns=("${(@f)$(<$1)}")
+    n=${${${(M)lns:#name:*}[1]#name:}##[[:space:]]#}
+    d=${${${(M)lns:#description:*}[1]#description:}##[[:space:]]#}
+    d=${${${d#[\"\']}%[\"\']}//\\n/ }
+    n=${n:-${1:t:r}}
+    items+=("${2}${n//:/\\:}:${d[1,80]}")
+  }
+  for f in $cfg/agents/*.md(N.) ${root:-$PWD}/.claude/agents/*.md(N.); do
+    _claude_agent_file $f
+  done
+  if (( $+commands[jq] )) && [[ -f $cfg/plugins/installed_plugins.json ]]; then
+    plugins=(${(f)"$(command jq -r '.plugins | to_entries[] | "\(.key)\t\(.value[0].installPath // "")"' \
+      $cfg/plugins/installed_plugins.json 2>/dev/null)"})
+    for p in $plugins; do
+      k=${${p%%$'\t'*}%%@*}
+      for f in ${p#*$'\t'}/agents/*.md(N.); do
+        _claude_agent_file $f "${k}\\:"
+      done
+    done
+  fi
+  unfunction _claude_agent_file
+  _describe -t agents 'agent' items
+}
+
+(( $+functions[_claude_mcp_servers] )) || _claude_mcp_servers() {
+  (( $+commands[jq] )) || return 1
+  local json=${CLAUDE_CONFIG_DIR:+$CLAUDE_CONFIG_DIR/.claude.json}
+  local root=$(command git rev-parse --show-toplevel 2>/dev/null) f
+  local -aU items files
+  json=${json:-$HOME/.claude.json}
+  [[ -f $json ]] && items=(${(f)"$(command jq -r --arg cwd $PWD --arg root "$root" '
+    ((.mcpServers // {}) | keys[] | "\(gsub(":"; "\\:")):user"),
+    ((.projects[$cwd].mcpServers // {}), (.projects[$root].mcpServers // {}) | keys[] |
+      "\(gsub(":"; "\\:")):local")' $json 2>/dev/null)"})
+  files=(.mcp.json(N:A) ${root:+$root/.mcp.json(N)})
+  for f in $files; do
+    items+=(${(f)"$(command jq -r '(.mcpServers // {}) | keys[] | "\(gsub(":"; "\\:")):project"' $f 2>/dev/null)"})
+  done
+  _describe -t mcp-servers 'MCP server' items
+}
+
+(( $+functions[_claude_plugins_installed] )) || _claude_plugins_installed() {
+  local f=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/installed_plugins.json
+  (( $+commands[jq] )) && [[ -f $f ]] || return 1
+  local -a items=(${(f)"$(command jq -r '.plugins | to_entries[] |
+    "\(.key | gsub(":"; "\\:")):\(.value[0].version // "") (\(.value[0].scope // ""))"' $f 2>/dev/null)"})
+  _describe -t plugins 'installed plugin' items
+}
+
+(( $+functions[_claude_marketplaces] )) || _claude_marketplaces() {
+  local f=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/known_marketplaces.json
+  (( $+commands[jq] )) && [[ -f $f ]] || return 1
+  local -a items=(${(f)"$(command jq -r 'to_entries[] |
+    "\(.key | gsub(":"; "\\:")):\(.value.source.repo // .value.source.url // .value.source.path // "")"' $f 2>/dev/null)"})
+  _describe -t marketplaces 'marketplace' items
+}
+
+(( $+functions[_claude_plugins_available] )) || _claude_plugins_available() {
+  local f=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/known_marketplaces.json
+  (( $+commands[jq] )) && [[ -f $f ]] || return 1
+  local -a manifests items
+  manifests=(${^${(f)"$(command jq -r '.[].installLocation // empty' $f 2>/dev/null)"}}/.claude-plugin/marketplace.json(N.))
+  (( $#manifests )) || return 1
+  items=(${(f)"$(command jq -r '.name as $mp | .plugins[]? |
+    "\(.name | gsub(":"; "\\:"))@\($mp):\((.description // "") | gsub("\\s+"; " ") | .[0:80])"' $manifests 2>/dev/null)"})
+  _describe -t plugins 'plugin' items
+}
+
+(( $+functions[_claude_bg_sessions] )) || _claude_bg_sessions() {
+  (( $+commands[jq] )) || return 1
+  local -a items=(${(f)"$(command claude agents --json --all </dev/null 2>/dev/null | command jq -r '
+    .[] | select(.kind != "interactive") | . as $s |
+    (($s.id // $s.shortId // empty), ($s.name // empty)) | tostring |
+    "\(gsub(":"; "\\:")):\($s.status // "") \($s.cwd // "")"' 2>/dev/null)"})
+  _describe -t sessions 'background session' items
+}
+
+# ---------------------------------------------------------------------------
+# spec builders (use the caller's locals: cpath sec term desc specs cmds canon
+# argdesc optflags)
+
+(( $+functions[_claude_optact] )) || _claude_optact() {
+  # REPLY <- _arguments action for option $1 with argument name $2 and description $3
+  local long=$1 arg=$2 desc=$3
+  local -a reply
+  case $long in
+    (--model|--fallback-model) REPLY=_claude_models; return ;;
+    (--resume) REPLY=_claude_sessions; return ;;
+    (--agent) REPLY=_claude_agent_names; return ;;
+    (--add-dir|--cwd) REPLY='_files -/'; return ;;
+    (--tools|--allowedTools|--allowed-tools|--disallowedTools|--disallowed-tools) REPLY=_claude_tools; return ;;
+    (--setting-sources) REPLY='_sequence compadd - user project local'; return ;;
+  esac
+  _claude_choices "$desc"
+  if (( $#reply )); then
+    REPLY="(${(j: :)${(@q)reply}})"
+    return
+  fi
+  case $long in
+    (--effort) REPLY='(low medium high xhigh max)' ;;
+    (--permission-mode) REPLY='(acceptEdits auto bypassPermissions manual dontAsk plan)' ;;
+    (*) case $arg in
+          (*(file|path|dir|json|config|settings)*) REPLY=_files ;;
+          (*) REPLY=' ' ;;
+        esac ;;
+  esac
+}
+
+(( $+functions[_claude_posact] )) || _claude_posact() {
+  # REPLY <- _arguments action for positional argument $1 of command $cpath
+  local a=$1
+  local -a reply
+  case "${(j: :)cpath} $a" in
+    ("mcp "(get|remove|login|logout)" name") REPLY=_claude_mcp_servers; return ;;
+    ("plugin marketplace "(remove|update)" name") REPLY=_claude_marketplaces; return ;;
+    ("plugin marketplace add "*) REPLY=_files; return ;;
+    ("plugin install plugin") REPLY=_claude_plugins_available; return ;;
+    ("plugin "[^\ ]#" plugin"|"plugin details name") REPLY=_claude_plugins_installed; return ;;
+    ((attach|logs|stop|rm|respawn)" "*) REPLY=_claude_bg_sessions; return ;;
+    ("install target") REPLY='(stable latest)'; return ;;
+    ("ultrareview target") REPLY=' '; return ;;
+  esac
+  _claude_choices "${argdesc[$a]}"
+  if (( $#reply )); then
+    REPLY="(${(j: :)${(@q)reply}})"
+  elif [[ $a == (*path*|*dir*|*file*|target) ]]; then
+    REPLY=_files
+  else
+    REPLY=' '
+  fi
+}
+
+(( $+functions[_claude_flush] )) || _claude_flush() {
+  [[ -n $term ]] || return 0
+  local REPLY sd f tok argtok arg long kind colon act
+  local -a w flags
+  _claude_short "$desc"; sd=$REPLY
+  case $sec in
+    (Options)
+      w=(${(s: :)term})
+      flags=(${${(M)w:#-*}%,})
+      argtok=${${(M)w:#[\<\[]*}[1]}
+      long=${${(M)flags:#--*}[1]}
+      if [[ -z $argtok ]]; then
+        for f in $flags; do specs+=("(${flags})${f}[${sd}]"); done
+      else
+        kind=req; [[ $argtok == \[* ]] && kind=opt
+        arg=${${argtok#?}%?}
+        colon=:; [[ $kind == opt ]] && { colon=::; optflags+=($flags) }
+        _claude_optact "$long" "${arg%...}" "$desc"; act=$REPLY
+        for f in $flags; do
+          [[ $f == --* ]] && f+='='
+          if [[ $arg == *... || $desc == *repeatable* ]]; then
+            specs+=("*${f}[${sd}]${colon}${${arg%...}//:/}:${act}")
+          else
+            specs+=("(${flags})${f}[${sd}]${colon}${arg//:/}:${act}")
+          fi
+        done
+      fi ;;
+    (Commands)
+      w=(${(s:|:)${term%% *}})
+      for f in $w; do
+        canon[$f]=$w[1]
+        cmds+=("${f}:${sd//\\/}")
+      done ;;
+    (Arguments)
+      argdesc[$term]=$desc ;;
+  esac
+  term= desc=
+}
+
+# ---------------------------------------------------------------------------
+# dispatcher: _claude_cmd [subcommand path...]
+
+(( $+functions[_claude_cmd] )) || _claude_cmd() {
+  setopt localoptions extendedglob
+  local -a cpath=("$@") specs cmds pos hl optflags
+  local -A canon argdesc
+  local REPLY l sec= term= desc= usage= tok a i=0 ret=1
+
+  _claude_help "$@" || return 1
+  hl=("${(@f)REPLY}")
+  for l in "$hl[@]" ''; do
+    if [[ $l == Usage:\ * ]]; then
+      usage=$l
+    elif [[ $l == [A-Z][A-Za-z\ ]#: ]]; then
+      _claude_flush; sec=${l%:}
+    elif [[ $l == '  '[^[:space:]]* ]]; then
+      _claude_flush
+      l=${l#  }
+      term=${l%%  *}
+      desc=
+      [[ $l == *'  '* ]] && desc=${${l#*  }##[[:space:]]#}
+    elif [[ $l == '   '* && -n $term ]]; then
+      desc+=" ${l##[[:space:]]#}"
+    else
+      _claude_flush
+    fi
+  done
+
+  if (( $#cmds )); then
+    local curcontext=$curcontext state state_descr line
+    local -A opt_args
+    _arguments -C -S $specs '1: :->cmd' '*:: :->args' && ret=0
+    case $state in
+      (cmd)
+        # after an option with an optional value (-r, --debug...) offer only its values
+        (( ${optflags[(I)${words[CURRENT-1]}]} )) ||
+          _describe -t commands "${${(j: :)cpath}:-claude} command" cmds && ret=0 ;;
+      (args)
+        a=${canon[$words[1]]}
+        if [[ -n $a ]]; then
+          curcontext="${curcontext%:*:*}:claude-${a}:"
+          _claude_cmd "${cpath[@]}" $a && ret=0
+        fi ;;
+    esac
+    return ret
+  fi
+
+  # leaf command: positional args from the usage line
+  for tok in ${${(s: :)${usage#Usage: }}[$((2 + $#cpath)),-1]}; do
+    [[ $tok == \[(options|command)\] ]] && continue
+    [[ $tok == (#b)([\<\[])([^\]\>]##)[\]\>]* ]] || continue
+    a=${match[2]%...}
+    _claude_posact $a
+    if [[ $match[2] == *... ]]; then
+      pos+=("*:${a}:${REPLY}")
+    elif [[ $match[1] == '<' ]]; then
+      pos+=("$((++i)):${a}:${REPLY}")
+    else
+      pos+=("$((++i))::${a}:${REPLY}")
+    fi
+  done
+  _arguments -S $specs $pos
+}
+
+_claude_cmd "$@"
