@@ -19,7 +19,7 @@ else
 fi
 
 # Register explicitly: `compinit -C` reuses a dump that may predate these files
-autoload -Uz _claude && compdef _claude claude
+autoload -Uz _claude && compdef _claude claude claude-kitty
 
 # Cached CLI completions — regenerate when binary changes
 _cache_completion() {

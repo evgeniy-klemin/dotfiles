@@ -150,6 +150,10 @@ for pkg in kitty nvim starship tmux zsh; do
         stow --restow "$pkg" 2>/dev/null && ok "$pkg" || warn "$pkg — stow conflict (run manually)"
     fi
 done
+# --no-folding: ~/.claude/kitty-tmux-shim must be a real dir (shim writes its log/state there)
+if [ -d "$DOTFILES_DIR/claude-kitty" ]; then
+    stow --restow --no-folding claude-kitty 2>/dev/null && ok "claude-kitty" || warn "claude-kitty — stow conflict (run manually)"
+fi
 
 # -------------------------------------------------------------------
 info "Done! Open a new terminal to apply changes."
