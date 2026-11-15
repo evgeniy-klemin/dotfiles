@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Launch Claude Code with the kitty<-tmux shim active, scoped to THIS process
+# only (does not shadow real tmux for the rest of your shell).
+#
+# Usage:  claude-kitty [any claude args...]
+
+set -euo pipefail
+
+SHIM_DIR="$HOME/.claude/kitty-tmux-shim"
+
+# 1) Put only our fake tmux first on PATH, and make sure `claude` itself is
+#    resolvable. When this launcher is started from an interactive shell, PATH
+#    already has ~/.local/bin; but when it is started by kitty session restore
+#    (startup_session) the inherited PATH is the minimal GUI one
+#    (/usr/bin:/bin:/usr/sbin:/sbin), so the `exec claude` below would fail with
+#    "command not found". Prepending ~/.local/bin keeps it self-sufficient.
+export PATH="$SHIM_DIR/bin:$HOME/.local/bin:$PATH"
+
+#    Resolve kitty's remote-control binary once and pass it to the shim via
+#    KITTY_TMUX_SHIM_BIN (kitty_bin() checks it first), so the shim doesn't
+#    re-scan PATH on every tmux call. Only export when one actually resolves --
+#    otherwise leave it unset and let the shim's own discovery (incl. the macOS
+#    app-bundle fallback) handle it.
+if [ -z "${KITTY_TMUX_SHIM_BIN:-}" ]; then
+  _kb="$(command -v kitten || command -v kitty || true)"
+  if [ -z "$_kb" ] && [ -x /Applications/kitty.app/Contents/MacOS/kitten ]; then
+    _kb="/Applications/kitty.app/Contents/MacOS/kitten"
+  fi
+  if [ -n "$_kb" ]; then export KITTY_TMUX_SHIM_BIN="$_kb"; fi
+  unset _kb
+fi
+
+# 2) Agent teams are experimental and off by default.
+export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+
+# 3) Do NOT fake $TMUX.
+#    When Claude Code believes it is inside tmux (i.e. $TMUX is set) it wraps
+#    every terminal escape it emits in tmux DCS passthrough (\ePtmux;...\e\\):
+#    desktop notifications (OSC 99/9/777), clipboard writes (OSC 52), truecolor
+#    and capability probes. kitty does NOT parse tmux passthrough, so it
+#    silently drops all of them -- you get no "Claude needs your input"
+#    notification, clipboard copies vanish, and color is downgraded to 256.
+#    Teammate split-pane mode is driven by the --teammate-mode tmux flag and
+#    this shim, NOT by $TMUX, so leaving $TMUX unset keeps teammates working
+#    while letting kitty receive notifications/clipboard natively.
+#
+#    Escape hatch: if you ever find teammate spawning genuinely needs the
+#    markers, run with KITTY_TMUX_SHIM_FAKE_TMUX=1 to restore the old behavior.
+if [ -n "${KITTY_TMUX_SHIM_FAKE_TMUX:-}" ]; then
+  export TMUX="${TMUX:-/tmp/fake-tmux-shim,$$,0}"
+  export TMUX_PANE="${TMUX_PANE:-%0}"
+fi
+
+# Sanity check: are we inside a kitty window with remote control reachable?
+if [ -z "${KITTY_WINDOW_ID:-}" ]; then
+  echo "warning: KITTY_WINDOW_ID is empty -- are you running inside kitty?" >&2
+fi
+
+exec claude --teammate-mode tmux "$@"

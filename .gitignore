@@ -3,3 +3,6 @@
 *.swo
 .netrwhist
 .claude/settings.local.json
+# runtime files of the kitty tmux shim (only land here if stowed without --no-folding)
+claude-kitty/.claude/kitty-tmux-shim/shim.log
+claude-kitty/.claude/kitty-tmux-shim/state.json

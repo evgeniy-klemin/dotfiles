@@ -1,0 +1,842 @@
+#!/usr/bin/env python3
+"""
+Fake `tmux` for Claude Code split-pane teammate mode on kitty.
+
+Translates the subset of tmux commands that Claude Code's split-pane mode
+shells out to, into kitty remote-control (`kitten @`) calls.
+
+Design:
+  * Put this file at  ~/.claude/kitty-tmux-shim/bin/tmux  (chmod +x).
+  * Prepend ONLY that bin dir to PATH inside the launcher (claude-kitty),
+    so you don't shadow real tmux for the rest of your shell.
+  * EVERYTHING is logged to ~/.claude/kitty-tmux-shim/shim.log
+    -> grep for "UNHANDLED" / "EXC" to discover what to add next.
+
+Requirements:
+  * kitty.conf:  allow_remote_control yes
+                 listen_on unix:/tmp/kitty
+                 enabled_layouts splits,stack   (splits must be active layout)
+  * The lead Claude Code session runs inside a kitty window.
+
+This never exits non-zero on an unknown command (that would crash CC); it
+logs and returns 0 instead. Check the log to extend coverage.
+"""
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+import time
+
+try:
+    import fcntl
+    HAVE_FCNTL = True
+except ImportError:  # non-unix; shouldn't happen on macOS
+    HAVE_FCNTL = False
+
+HOME = os.path.expanduser("~")
+SHIM_DIR = os.path.join(HOME, ".claude", "kitty-tmux-shim")
+# Keep everything we create here (the dir, state.json, shim.log) owner-only. One
+# umask call costs nothing per write; it only affects files created after it, so
+# a pre-existing dir/file keeps its mode (acceptable -- ~/.claude is already
+# private). The shim is short-lived and only spawns `kitten @` clients, so a
+# restrictive umask has no wider side effects.
+os.umask(0o077)
+os.makedirs(SHIM_DIR, exist_ok=True)
+LOG = os.path.join(SHIM_DIR, "shim.log")
+STATE = os.path.join(SHIM_DIR, "state.json")
+
+FAKE_VERSION = "tmux 3.5a"
+
+
+# --------------------------------------------------------------------------- #
+# logging
+# --------------------------------------------------------------------------- #
+def log(msg):
+    try:
+        with open(LOG, "a") as f:
+            f.write(f"{time.strftime('%H:%M:%S')} pid={os.getpid()} {msg}\n")
+    except Exception:
+        pass
+
+
+# --------------------------------------------------------------------------- #
+# locate kitty / kitten
+# --------------------------------------------------------------------------- #
+def kitty_bin():
+    if os.environ.get("KITTY_TMUX_SHIM_BIN"):
+        return os.environ["KITTY_TMUX_SHIM_BIN"]
+    path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+    for name in ("kitten", "kitty"):
+        for d in path_dirs:
+            cand = os.path.join(d, name)
+            if os.path.isfile(cand) and os.access(cand, os.X_OK):
+                return cand
+    for cand in ("/Applications/kitty.app/Contents/MacOS/kitten",
+                 "/Applications/kitty.app/Contents/MacOS/kitty"):
+        if os.path.isfile(cand):
+            return cand
+    return "kitten"
+
+
+KITTY = kitty_bin()
+
+
+def kitty_rc(args, capture=False, input_text=None):
+    cmd = [KITTY, "@"]
+    listen = os.environ.get("KITTY_LISTEN_ON")
+    if listen:
+        cmd += ["--to", listen]
+    cmd += args
+    log("KITTY " + " ".join(shlex.quote(a) for a in cmd))
+    try:
+        if capture:
+            r = subprocess.run(cmd, capture_output=True, text=True,
+                               input=input_text)
+        else:
+            r = subprocess.run(cmd, text=True, input=input_text,
+                               stdout=subprocess.DEVNULL,
+                               stderr=subprocess.PIPE)
+        if r.returncode != 0:
+            log(f"  kitty rc={r.returncode} err={(r.stderr or '').strip()}")
+        return r.stdout if capture else ""
+    except Exception as e:
+        log(f"  kitty EXC {e}")
+        return ""
+
+
+def send_text(wid, text):
+    """Send raw text to a kitty window. The `--stdin` flag is REQUIRED: without
+    it `kitten @ send-text` ignores the piped stdin and delivers nothing while
+    still exiting 0 -- which silently swallows every teammate command and any
+    literal send-keys text. Passing text via stdin (not argv) keeps arbitrary
+    bytes -- quotes, spaces, `\\r` -- intact."""
+    kitty_rc(["send-text", "--stdin", "--match", "id:" + wid], input_text=text)
+
+
+# --------------------------------------------------------------------------- #
+# state: remember last-created window id for fallback targets
+# --------------------------------------------------------------------------- #
+def _blank_state():
+    # `sessions` emulates the detached "swarm" sessions CC's external-session
+    # backend creates (see cmd_new_session). Each maps a tmux session name to
+    # the list of kitty window ids acting as that session's panes.
+    return {"last": None, "ids": [], "sessions": {}}
+
+
+def load_state():
+    # Read under a SHARED lock so we never observe a concurrent mutate_state()
+    # mid-write (it truncates then re-dumps under LOCK_EX). Without this, a torn
+    # read yields a JSON error -> blank state -> resolve_id() returns None -> a
+    # pane op is silently dropped. LOCK_SH only blocks while a writer holds
+    # LOCK_EX, then reads the complete file.
+    try:
+        f = open(STATE)
+    except Exception:
+        return _blank_state()
+    try:
+        if HAVE_FCNTL:
+            fcntl.flock(f, fcntl.LOCK_SH)
+        st = json.load(f)
+    except Exception:
+        st = _blank_state()
+    finally:
+        if HAVE_FCNTL:
+            try:
+                fcntl.flock(f, fcntl.LOCK_UN)
+            except Exception:
+                pass
+        f.close()
+    for k, v in _blank_state().items():
+        st.setdefault(k, v)
+    return st
+
+
+def mutate_state(fn):
+    f = open(STATE, "a+")
+    try:
+        if HAVE_FCNTL:
+            fcntl.flock(f, fcntl.LOCK_EX)
+        f.seek(0)
+        try:
+            st = json.load(f)
+        except Exception:
+            st = _blank_state()
+        for k, v in _blank_state().items():
+            st.setdefault(k, v)
+        fn(st)
+        f.seek(0)
+        f.truncate()
+        json.dump(st, f)
+    finally:
+        if HAVE_FCNTL:
+            fcntl.flock(f, fcntl.LOCK_UN)
+        f.close()
+
+
+# --------------------------------------------------------------------------- #
+# helpers
+# --------------------------------------------------------------------------- #
+def resolve_id(token):
+    """tmux -t token  ->  kitty window id (string of digits)."""
+    if not token:
+        return load_state().get("last")
+    m = re.search(r"%(\d+)", token)          # %5
+    if m:
+        return m.group(1)
+    m = re.search(r"(\d+)\s*$", token)        # sess:1.2  -> 2
+    if m:
+        return m.group(1)
+    return load_state().get("last")           # {last}, {right}, ...
+
+
+def current_pane_id():
+    """kitty window id of the pane the shim is running under (the lead pane).
+    CC's external-session backend calls `display-message -p '#{pane_id}'` with
+    no target to anchor the swarm; it must get a real, non-empty id or it aborts
+    with 'Failed to get current pane ID'. kitty exports KITTY_WINDOW_ID into
+    every window's env, and CC inherits it, so it reaches this subprocess."""
+    return os.environ.get("KITTY_WINDOW_ID") or load_state().get("last")
+
+
+def session_name(token):
+    """Extract a tmux session name from a target token: 'swarm:1.2' -> 'swarm',
+    '$swarm' -> 'swarm'. Returns None if the token is only an id (%5/@5/digits)."""
+    if not token:
+        return None
+    t = token.split(":", 1)[0].lstrip("$")
+    if not t or re.fullmatch(r"[%@]?\d+", t):
+        return None
+    return t
+
+
+def fmt_resolve(fmt, wid, sess=None, winname=None, pane_index="0", win_index="0"):
+    """Fill a tmux -F/#{...} format string. kitty has no window/pane split, so a
+    tmux pane_id maps to %<id> and a tmux window_id to @<id> for the same kitty
+    window id. Fields we don't model are blanked (mirrors cmd_display_message)."""
+    pane = ("%" + wid) if wid else "%0"
+    win = ("@" + wid) if wid else "@0"
+    s = (fmt.replace("#{pane_id}", pane)
+            .replace("#{pane_index}", pane_index)
+            .replace("#{window_id}", win)
+            .replace("#{window_index}", win_index)
+            .replace("#{window_name}", winname or (sess or ""))
+            .replace("#{session_name}", sess or ""))
+    return re.sub(r"#\{[^}]*\}", "", s)
+
+
+# CC creates each swarm pane running a placeholder (`cat`) that just holds the
+# pane open, then swaps in the real teammate command via `respawn-pane`. kitty
+# can't exec into a running process, so we run the command in the pane's shell
+# (cmd_respawn_pane send-texts it). We launch a **minimal /bin/sh** for that
+# shell, NOT the user's interactive shell: a full zsh/bash with prompt framework
+# and plugins can take seconds to initialize and flushes type-ahead, which drops
+# the command respawn-pane sends. /bin/sh is ready immediately, doesn't flush
+# input, and keeps the pane open after the teammate exits (matches CC's
+# `remain-on-exit`). The teammate command is self-contained (absolute path, own
+# `cd` and `env`), so it needs nothing from the user's rc files.
+PLACEHOLDER_CMDS = {"cat", "sh", "bash", "zsh"}
+PLACEHOLDER_SHELL = ["/bin/sh"]
+
+
+def pane_command(cmd_tokens):
+    if cmd_tokens and all(t in PLACEHOLDER_CMDS for t in cmd_tokens):
+        return list(PLACEHOLDER_SHELL)
+    return cmd_tokens
+
+
+def kitty_launch_split(location, cwd=None, cmd_tokens=None):
+    """Open a kitty split next to the spawning CC and return its kitty window id
+    ('' on failure). Shared by split-window / new-session / new-window so a
+    materialized tmux pane is always a real kitty pane with a resolvable id.
+
+    The split is pinned to the tab that holds the spawning CC (its window id is
+    KITTY_WINDOW_ID, inherited into this subprocess) via `--match window_id:`.
+    Without that, `launch` splits whatever kitty window is *currently active* --
+    so teammates would land in whichever tab the user happens to be looking at,
+    not the one running the lead session."""
+    launch = ["launch", "--location", location,
+              "--cwd", cwd or "current", "--keep-focus"]
+    cc = os.environ.get("KITTY_WINDOW_ID")
+    if cc:
+        launch += ["--match", "window_id:" + cc]
+    if cmd_tokens:
+        launch += ["--"] + cmd_tokens
+    out = kitty_rc(launch, capture=True).strip()
+    wid = out.splitlines()[-1].strip() if out else ""
+    if not wid.isdigit():
+        log(f"  launch: unexpected output {out!r}")
+        return ""
+    apply_pane_spacing(wid)
+    return wid
+
+
+# Optional margin/padding for each teammate pane the shim creates (never the
+# lead). OFF by default so we respect whatever spacing the user configured in
+# kitty.conf -- `set-spacing` would otherwise override their margin on these
+# panes. Opt in via env, e.g. KITTY_TMUX_SHIM_PANE_SPACING="margin=8 padding=6"
+# or "margin-h=10". Values are kitty set-spacing tokens (pts); "none"/"" is off.
+DEFAULT_PANE_SPACING = "none"
+
+
+def apply_pane_spacing(wid):
+    spec = os.environ.get("KITTY_TMUX_SHIM_PANE_SPACING", DEFAULT_PANE_SPACING).strip()
+    if not spec or spec.lower() == "none":
+        return
+    kitty_rc(["set-spacing", "--match", "id:" + wid] + spec.split())
+
+
+def record_pane(wid, sess=None):
+    """Track a freshly created kitty window as last/live, and (if named) as a
+    pane of the given swarm session."""
+    def upd(st):
+        st["last"] = wid
+        if wid not in st["ids"]:
+            st["ids"].append(wid)
+        if sess:
+            s = st["sessions"].setdefault(sess, {"panes": [], "winname": sess})
+            if wid not in s["panes"]:
+                s["panes"].append(wid)
+    mutate_state(upd)
+
+
+KEY_MAP = {
+    "Enter": "enter", "C-m": "enter", "KPEnter": "enter",
+    "Escape": "escape", "Esc": "escape",
+    "Tab": "tab", "BTab": "shift+tab", "S-Tab": "shift+tab",
+    "Space": "space", "BSpace": "backspace", "DC": "delete",
+    "Up": "up", "Down": "down", "Left": "left", "Right": "right",
+    "Home": "home", "End": "end",
+    "PageUp": "page_up", "PageDown": "page_down",
+    "PgUp": "page_up", "PgDn": "page_down",
+}
+
+
+def map_key(tok):
+    if tok in KEY_MAP:
+        return KEY_MAP[tok]
+    m = re.fullmatch(r"C-([a-zA-Z])", tok)
+    if m:
+        return "ctrl+" + m.group(1).lower()
+    m = re.fullmatch(r"M-([a-zA-Z])", tok)
+    if m:
+        return "alt+" + m.group(1).lower()
+    m = re.fullmatch(r"S-([a-zA-Z])", tok)
+    if m:
+        return "shift+" + m.group(1).lower()
+    m = re.fullmatch(r"F(\d+)", tok)
+    if m:
+        return "f" + m.group(1)
+    return None  # -> treat as literal text
+
+
+def split_global(argv):
+    """Skip leading global tmux options, return (subcommand, rest)."""
+    takes_arg = {"-f", "-L", "-S", "-c", "-T"}
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--":
+            i += 1
+            break
+        if a.startswith("-"):
+            i += 2 if a in takes_arg else 1
+            continue
+        break
+    if i >= len(argv):
+        return None, []
+    return argv[i], argv[i + 1:]
+
+
+# --------------------------------------------------------------------------- #
+# command handlers
+# --------------------------------------------------------------------------- #
+def cmd_split_window(args):
+    horizontal = False  # tmux -h => left/right => kitty vsplit
+    cwd = None
+    fmt = None
+    target = None
+    cmd_tokens = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-h":
+            horizontal = True; i += 1
+        elif a == "-v":
+            horizontal = False; i += 1
+        elif a == "-F":
+            fmt = args[i + 1]; i += 2
+        elif a == "-c":
+            cwd = args[i + 1]; i += 2
+        elif a == "-t":
+            target = args[i + 1]; i += 2
+        elif a in ("-l", "-p"):
+            i += 2  # size: ignore value
+        elif a == "-e":
+            i += 2  # env (VAR=val): value-taking, don't misparse it as the command
+        elif a in ("-d", "-P", "-b", "-f", "-I", "-Z"):
+            i += 1
+        elif a == "--":
+            cmd_tokens = args[i + 1:]; break
+        elif a.startswith("-"):
+            i += 1
+        else:
+            cmd_tokens = args[i:]
+            break
+    location = "vsplit" if horizontal else "hsplit"
+    wid = kitty_launch_split(location, cwd, pane_command(cmd_tokens))
+    sess = session_name(target)
+    if wid:
+        record_pane(wid, sess)
+    if fmt:
+        print(fmt_resolve(fmt, wid, sess=sess))
+    else:
+        print("%" + wid if wid else "%0")
+
+
+def cmd_send_keys(args):
+    target = None
+    literal = False
+    toks = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-t":
+            target = args[i + 1]; i += 2
+        elif a == "-l":
+            literal = True; i += 1
+        elif a == "-N":
+            i += 2
+        elif a in ("-R", "-H", "-M", "-K"):
+            i += 1
+        elif a == "--":
+            toks.extend(args[i + 1:]); break
+        elif a.startswith("-") and a != "-":
+            i += 1
+        else:
+            toks.append(a); i += 1
+    wid = resolve_id(target)
+    if not wid:
+        log("  send-keys: could not resolve target id")
+        return
+    match = ["--match", "id:" + wid]
+    if literal:
+        send_text(wid, "".join(toks))
+        return
+    for tok in toks:
+        kname = map_key(tok)
+        if kname:
+            kitty_rc(["send-key"] + match + [kname])
+        else:
+            send_text(wid, tok)
+
+
+def cmd_capture_pane(args):
+    target = None
+    scrollback = False
+    ansi = False
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-t":
+            target = args[i + 1]; i += 2
+        elif a == "-S":
+            scrollback = True; i += 2
+        elif a in ("-E", "-b"):
+            i += 2
+        elif a == "-e":
+            ansi = True; i += 1
+        elif a in ("-p", "-J", "-N", "-T", "-q", "-C", "-a", "-P"):
+            i += 1
+        elif a.startswith("-"):
+            i += 1
+        else:
+            i += 1
+    wid = resolve_id(target)
+    if not wid:
+        log("  capture-pane: could not resolve target id")
+        return
+    rc = ["get-text", "--match", "id:" + wid,
+          "--extent", "all" if scrollback else "screen"]
+    if ansi:
+        rc.append("--ansi")
+    sys.stdout.write(kitty_rc(rc, capture=True))
+
+
+def cmd_kill_pane(args):
+    target = None
+    i = 0
+    while i < len(args):
+        if args[i] == "-t":
+            target = args[i + 1]; i += 2
+        else:
+            i += 1
+    wid = resolve_id(target)
+    if wid:
+        kitty_rc(["close-window", "--match", "id:" + wid])
+
+        def drop(st):
+            if wid in st["ids"]:
+                st["ids"].remove(wid)
+            for s in st["sessions"].values():
+                if wid in s.get("panes", []):
+                    s["panes"].remove(wid)
+        mutate_state(drop)
+
+
+def cmd_kill_session(args):
+    """Tear down a swarm session. A resolvable `-t <session>` closes only *that*
+    session's panes and forgets only it, so a second live session survives (CC's
+    single-swarm teardown is unaffected). An absent/unknown target falls back to
+    closing everything, preserving the original blunt behavior."""
+    target = None
+    i = 0
+    while i < len(args):
+        if args[i] == "-t":
+            target = args[i + 1]; i += 2
+        elif args[i].startswith("-"):
+            i += 1
+        else:
+            i += 1
+    sess = session_name(target)
+    st = load_state()
+    if sess and sess in st.get("sessions", {}):
+        panes = list(st["sessions"][sess].get("panes", []))
+        for wid in panes:
+            kitty_rc(["close-window", "--match", "id:" + wid])
+
+        def drop(st):
+            st["sessions"].pop(sess, None)
+            st["ids"] = [w for w in st["ids"] if w not in panes]
+            if st.get("last") in panes:
+                st["last"] = st["ids"][-1] if st["ids"] else None
+        mutate_state(drop)
+    else:
+        for wid in st.get("ids", []):
+            kitty_rc(["close-window", "--match", "id:" + wid])
+        mutate_state(lambda st: st.update(last=None, ids=[], sessions={}))
+
+
+def cmd_select(args):
+    """tmux select-pane. CC issues this per teammate mainly to set the pane
+    title (`-T`) and border during swarm setup. We deliberately do NOT
+    focus-window here: focusing a teammate pane yanks kitty to the lead's tab
+    (and raises the OS window), stealing the user's focus from wherever they are
+    while agents spawn in the background. Every real shim op targets an explicit
+    id, so the active-pane never matters -- only the title does."""
+    target = None
+    title = None
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-t":
+            target = args[i + 1]; i += 2
+        elif a == "-T":
+            title = args[i + 1]; i += 2   # pane title -> kitty window title
+        elif a.startswith("-"):
+            i += 1
+        else:
+            i += 1
+    wid = resolve_id(target)
+    if wid and title:
+        kitty_rc(["set-window-title", "--match", "id:" + wid, title])
+
+
+def wait_for_prompt(wid, timeout=8.0):
+    """Block until the pane's shell has drawn its prompt, then return True.
+
+    A freshly launched interactive shell runs readline/zle init which does a
+    TCSAFLUSH -- any input sent before its first prompt is discarded. So a fixed
+    sleep races the shell (worse under load). We instead poll the pane text until
+    a prompt glyph appears (/bin/sh shows `sh-3.2$`), which means the flush is
+    done and the line editor is reading."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        txt = kitty_rc(["get-text", "--match", "id:" + wid, "--extent", "screen"],
+                       capture=True)
+        if txt and any(p in txt for p in ("$", "#", "%", "❯", ">")):
+            time.sleep(0.15)   # let readline settle into read mode
+            return True
+        time.sleep(0.15)
+    return False
+
+
+def cmd_respawn_pane(args):
+    """CC swaps the real teammate command into a placeholder pane. kitty can't
+    exec into a running window, so we run the command in the pane's /bin/sh (see
+    pane_command) by sending it as text + Enter, once the shell's prompt is up.
+    `\\r` (carriage return) is the Enter that shell line editors accept in both
+    cooked and raw mode."""
+    target = None
+    cmd_tokens = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-t":
+            target = args[i + 1]; i += 2
+        elif a == "-c":
+            i += 2  # start-directory: ignore value
+        elif a == "--":
+            cmd_tokens = args[i + 1:]; break
+        elif a.startswith("-"):
+            i += 1   # -k (kill) and friends: no value
+        else:
+            i += 1
+    wid = resolve_id(target)
+    if not wid:
+        log("  respawn-pane: could not resolve target id")
+        return
+    if not cmd_tokens:
+        return
+    if not wait_for_prompt(wid):
+        log("  respawn-pane: shell prompt not seen before timeout; sending anyway")
+    cmd_str = " ".join(cmd_tokens)
+    send_text(wid, cmd_str + "\r")
+
+
+def cmd_new_session(args):
+    """CC's external-session backend runs this to create a detached "swarm"
+    session, then reads back `#{pane_id}` to anchor it. We materialize the
+    session's initial pane as a real kitty split (it becomes the first teammate
+    pane) and print the requested -F format so CC gets a usable id."""
+    name = cwd = fmt = winname = None
+    pflag = False
+    cmd_tokens = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-s":
+            name = args[i + 1]; i += 2
+        elif a == "-n":
+            winname = args[i + 1]; i += 2
+        elif a == "-c":
+            cwd = args[i + 1]; i += 2
+        elif a == "-F":
+            fmt = args[i + 1]; i += 2
+        elif a == "-P":
+            pflag = True; i += 1
+        elif a in ("-x", "-y", "-e"):
+            i += 2  # geometry / env: ignore value
+        elif a in ("-d", "-A", "-D", "-E", "-X"):
+            i += 1
+        elif a == "--":
+            cmd_tokens = args[i + 1:]; break
+        elif a.startswith("-"):
+            i += 1
+        else:
+            cmd_tokens = args[i:]; break
+    name = name or "swarm"
+    wid = kitty_launch_split("vsplit", cwd, pane_command(cmd_tokens))
+    if wid:
+        def upd(st):
+            st["last"] = wid
+            if wid not in st["ids"]:
+                st["ids"].append(wid)
+            st["sessions"][name] = {"panes": [wid], "winname": winname or name}
+        mutate_state(upd)
+    if fmt:
+        print(fmt_resolve(fmt, wid, sess=name, winname=winname))
+    elif pflag:
+        print(f"{name}:0.0")
+
+
+def cmd_new_window(args):
+    """A new tmux window in a session (CC's best-effort "swarm-view" window).
+    We don't open a separate kitty tab for it -- teammate panes already land in
+    the lead's window via split-window -- but we return a coherent id/format so
+    CC's (try/caught) swarm-view setup doesn't error out."""
+    target = fmt = winname = None
+    pflag = False
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-t":
+            target = args[i + 1]; i += 2
+        elif a == "-n":
+            winname = args[i + 1]; i += 2
+        elif a == "-F":
+            fmt = args[i + 1]; i += 2
+        elif a == "-P":
+            pflag = True; i += 1
+        elif a in ("-c", "-e"):
+            i += 2
+        elif a in ("-d", "-k", "-a", "-b"):
+            i += 1
+        elif a == "--":
+            break
+        elif a.startswith("-"):
+            i += 1
+        else:
+            break
+    sess = session_name(target)
+    st = load_state()
+    panes = st["sessions"].get(sess, {}).get("panes", []) if sess else []
+    wid = panes[0] if panes else current_pane_id()
+    wid = str(wid) if wid else ""
+    if fmt:
+        print(fmt_resolve(fmt, wid, sess=sess, winname=winname))
+    elif pflag:
+        print(f"{sess or 'swarm'}:0.0")
+
+
+def cmd_has_session(args):
+    """Return 0 iff the swarm session is one we've created. External-session mode
+    calls this to decide whether to create the session, so an honest yes/no is
+    required (unlike the old always-0 behavior, which was for the inside-tmux
+    path). A non-zero exit here is normal tmux semantics -- CC expects it and
+    does NOT crash on it."""
+    target = None
+    i = 0
+    while i < len(args):
+        if args[i] == "-t":
+            target = args[i + 1]; i += 2
+        else:
+            i += 1
+    sess = session_name(target)
+    return 0 if sess and sess in load_state()["sessions"] else 1
+
+
+def cmd_list_panes(args):
+    """Enumerate a session's panes for CC's pane-count / rebalance logic."""
+    target = None
+    fmt = "#{pane_id}"
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-t":
+            target = args[i + 1]; i += 2
+        elif a == "-F":
+            fmt = args[i + 1]; i += 2
+        elif a in ("-s", "-a", "-q"):
+            i += 1
+        elif a.startswith("-"):
+            i += 1
+        else:
+            i += 1
+    sess = session_name(target)
+    st = load_state()
+    if sess and sess in st["sessions"]:
+        wids = st["sessions"][sess]["panes"]
+    else:
+        wid = resolve_id(target) or current_pane_id()
+        wids = [str(wid)] if wid else []
+    for idx, wid in enumerate(wids):
+        print(fmt_resolve(fmt, str(wid), sess=sess, pane_index=str(idx)))
+
+
+def cmd_list_windows(args):
+    """One line per window in a session (we model a single window per session)."""
+    target = None
+    fmt = "#{window_id}"
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-t":
+            target = args[i + 1]; i += 2
+        elif a == "-F":
+            fmt = args[i + 1]; i += 2
+        elif a.startswith("-"):
+            i += 1
+        else:
+            i += 1
+    sess = session_name(target)
+    st = load_state()
+    info = st["sessions"].get(sess) if sess else None
+    wid = str(info["panes"][0]) if info and info["panes"] else (current_pane_id() or "")
+    print(fmt_resolve(fmt, wid, sess=sess, winname=(info or {}).get("winname")))
+
+
+def cmd_display_message(args):
+    pflag = False
+    fmt = None
+    target = None
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-p":
+            pflag = True; i += 1
+        elif a == "-t":
+            target = args[i + 1]; i += 2
+        elif a.startswith("-"):
+            i += 1
+        else:
+            fmt = a; i += 1
+    # No target => CC is asking about the *current* pane (getCurrentPaneId /
+    # getCurrentWindowTarget). That must resolve to the lead kitty window, not a
+    # stale 'last', or the external-session anchor step fails.
+    if target:
+        wid = resolve_id(target) or current_pane_id() or "0"
+    else:
+        wid = current_pane_id() or load_state().get("last") or "0"
+    sess = session_name(target)
+    # -p always needs a value back: CC treats empty output as "Failed to get
+    # current pane ID" and aborts. Default the format if one wasn't supplied.
+    if pflag:
+        print(fmt_resolve(fmt or "#{pane_id}", str(wid), sess=sess))
+
+
+HANDLERS = {
+    "split-window": cmd_split_window, "splitw": cmd_split_window,
+    "send-keys": cmd_send_keys, "send": cmd_send_keys,
+    "capture-pane": cmd_capture_pane, "capturep": cmd_capture_pane,
+    "kill-pane": cmd_kill_pane, "killp": cmd_kill_pane,
+    "kill-window": cmd_kill_pane,
+    "kill-session": cmd_kill_session,
+    "select-pane": cmd_select, "selectp": cmd_select,
+    "select-window": cmd_select, "selectw": cmd_select,
+    "respawn-pane": cmd_respawn_pane, "respawnp": cmd_respawn_pane,
+    "display-message": cmd_display_message, "display": cmd_display_message,
+    # External-session ("swarm") mode: CC picks this backend when $TMUX is unset
+    # (the launcher keeps it unset for notifications/clipboard/truecolor). These
+    # materialize the detached session/panes CC expects as real kitty splits.
+    "new-session": cmd_new_session, "new": cmd_new_session,
+    "new-window": cmd_new_window, "neww": cmd_new_window,
+    "has-session": cmd_has_session, "has": cmd_has_session,
+    "list-panes": cmd_list_panes, "lsp": cmd_list_panes,
+    "list-windows": cmd_list_windows, "lsw": cmd_list_windows,
+}
+
+# Commands we accept silently so CC's flow doesn't break.
+NOOP = {
+    "start-server", "kill-server",
+    "set-option", "set", "set-window-option", "setw", "set-hook",
+    "set-environment", "setenv", "show-environment", "showenv",
+    "rename-window", "rename-session", "select-layout", "next-layout",
+    "resize-pane", "resizep", "refresh-client", "attach-session", "attach",
+    "switch-client", "wait-for", "pipe-pane", "list-clients", "lsc",
+    "list-sessions", "ls",
+    "server-info", "info", "clock-mode", "rotate-window", "swap-pane",
+    "break-pane", "join-pane", "command-prompt",
+}
+
+
+def main():
+    argv = sys.argv[1:]
+    log("ARGV " + " ".join(shlex.quote(a) for a in argv))
+    if "-V" in argv:
+        print(FAKE_VERSION)
+        return 0
+    sub, rest = split_global(argv)
+    if sub is None:
+        return 0
+    if sub in HANDLERS:
+        try:
+            rc = HANDLERS[sub](rest)
+            # A handler may return an int exit code to model real tmux semantics
+            # (e.g. has-session -> 1 when the session doesn't exist). CC expects
+            # and handles these, so they are safe. On any exception we still
+            # return 0 -- never crash CC on a handler bug.
+            return rc if isinstance(rc, int) else 0
+        except Exception as e:
+            log(f"  HANDLER EXC {sub}: {e!r}")
+        return 0
+    if sub in NOOP:
+        log(f"  NOOP {sub}")
+        return 0
+    log(f"  UNHANDLED {sub} args={rest}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

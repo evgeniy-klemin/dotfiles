@@ -6,6 +6,7 @@ Personal dotfiles for macOS managed with [GNU Stow](https://www.gnu.org/software
 
 | Package | Files |
 |---------|-------|
+| `claude-kitty` | `.claude/kitty-tmux-shim/bin/tmux`, `.local/bin/claude-kitty` — Claude Code teammates as kitty splits; stow with `--no-folding` — [details](claude-kitty/README.md) |
 | `kitty`    | `.config/kitty/kitty.conf`, `current-theme.conf` |
 | `nvim`     | `.config/nvim/` (Lua-based neovim config) — [details](nvim/.config/nvim/README.md) |
 | `starship` | `.config/starship.toml` |
