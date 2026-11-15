@@ -1,5 +1,5 @@
-#compdef claude
-# Zsh completion for the Claude Code CLI.
+#compdef claude claude-kitty
+# Zsh completion for the Claude Code CLI (also claude-kitty, which passes its args to claude).
 #
 # Options and subcommands are parsed from `claude [cmd...] --help` and cached in
 # ~/.cache/zsh/claude-help (regenerated when the claude binary changes), so new
