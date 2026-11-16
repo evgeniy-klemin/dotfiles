@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+"""
+claude-kitty-rc-proxy -- run claude-kitty inside a nono sandbox without handing
+the sandbox kitty's remote-control socket.
+
+Why: the claude-kitty tmux shim drives kitty through `kitten @` over kitty's
+remote-control socket, and with `allow_remote_control socket-only` that socket
+is full control of kitty: launch any command outside the sandbox, type into any
+window, read any window, change kitty's env/config. A sandboxed lead must not
+get it. This proxy sits outside the sandbox, owns the only path to that socket,
+and lets through just what the shim needs.
+
+Modes:
+
+  serve   Runs OUTSIDE the sandbox. Binds a private Unix socket, starts the
+          lead command (e.g. `nono run ... -- claude-kitty ...`) as its child
+          with KITTY_TMUX_SHIM_BIN pointing at this script, relays the shim's
+          requests to kitty after checking them, and exits with the lead's
+          exit status. Needs KITTY_LISTEN_ON (unix:) and KITTY_WINDOW_ID.
+
+            claude-kitty-rc-proxy serve --socket PATH \\
+                --teammate-prefix 'ABS-PATH ... --' -- LEAD-CMD...
+
+  client  Runs INSIDE the sandbox as the shim's `kitten` (first arg is "@").
+          Sends the `kitten @ ...` argv (plus stdin for `send-text --stdin`)
+          to the socket in $CLAUDE_KITTY_RC_PROXY and replays the result.
+
+Policy -- everything else is denied:
+  * only the commands the shim issues (launch, send-text, send-key, get-text,
+    close-window, set-spacing, set-window-title), in the shapes it uses;
+  * launch always opens the pane next to the lead's window, in the lead's
+    cwd, and runs `<teammate-prefix> <command>`, so each teammate gets the
+    same sandbox as the lead. The requested --cwd/--match are ignored: a cwd
+    of the lead's choosing would widen the teammate's --allow-cwd grant
+    (e.g. to $HOME). Teammates `cd` into their worktree themselves;
+  * teammates get serve's environment, as tmux panes get the environment of
+    the tmux server the lead started -- not kitty's (a GUI app's PATH has no
+    Homebrew, so hooks fail with `node: command not found`). Variables kitty
+    sets per window and ones describing the lead's terminal are left out;
+  * the other commands may only target windows this proxy launched.
+"""
+import json
+import os
+import re
+import shlex
+import shutil
+import signal
+import socket
+import socketserver
+import subprocess
+import sys
+import threading
+import time
+
+SOCKET_ENV = "CLAUDE_KITTY_RC_PROXY"
+LOG_PATH = os.path.expanduser("~/.claude/kitty-tmux-shim/rc-proxy.log")
+MAX_REQUEST = 1 << 20      # bytes; teammate commands sent via send-text are a few KB
+MAX_PANES = 16             # live teammate windows per lead
+KITTEN_TIMEOUT = 30        # seconds per kitten call
+
+MATCH_RE = re.compile(r"(?:id|window_id):([0-9]{1,9})")
+KEY_RE = re.compile(r"[A-Za-z0-9_+-]{1,32}")
+SPACING_RE = re.compile(r"(?:margin|padding)(?:-(?:left|right|top|bottom|h|v))?=(?:[0-9]{1,3}|default)")
+
+# Not passed on to teammates: kitty sets these per window, or they describe the
+# lead's terminal/shell rather than the session.
+SKIP_ENV = {"WINDOWID", "TERM", "TERMINFO", "COLORTERM", "PWD", "OLDPWD", "SHLVL", "_",
+            "TMUX", "TMUX_PANE", SOCKET_ENV}
+SKIP_ENV_PREFIXES = ("KITTY_", "TERM_")
+
+
+def teammate_env_args(environ):
+    return [a for k, v in sorted(environ.items())
+            if k not in SKIP_ENV and not k.startswith(SKIP_ENV_PREFIXES)
+            for a in ("--env", f"{k}={v}")]
+
+
+def log(msg):
+    try:
+        with open(LOG_PATH, "a") as f:
+            f.write(time.strftime("%H:%M:%S ") + msg + "\n")
+    except OSError:
+        pass
+
+
+class Denied(Exception):
+    pass
+
+
+def parse(args, value_flags=(), bool_flags=()):
+    """Split args into ({flag: value}, positionals, after_dashdash or None).
+    Only the listed flags are accepted, each at most once, never as --flag=value."""
+    opts, pos = {}, []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--":
+            return opts, pos, args[i + 1:]
+        if a.startswith("-") and a != "-":
+            if a in opts:
+                raise Denied(f"repeated {a}")
+            if a in value_flags:
+                if i + 1 >= len(args):
+                    raise Denied(f"{a} needs a value")
+                opts[a] = args[i + 1]
+                i += 2
+                continue
+            if a in bool_flags:
+                opts[a] = True
+                i += 1
+                continue
+            raise Denied(f"flag {a!r} not allowed")
+        pos.append(a)
+        i += 1
+    return opts, pos, None
+
+
+class Policy:
+    def __init__(self, kitten, listen_on, lead_wid, lead_cwd, prefix, env_args):
+        self.kitten = kitten
+        self.listen_on = listen_on
+        self.lead_wid = lead_wid
+        self.lead_cwd = lead_cwd
+        self.prefix = prefix
+        self.env_args = env_args
+        self.panes = set()
+        self.lock = threading.Lock()
+        self.commands = {
+            "launch": self.launch,
+            "send-text": self.send_text,
+            "send-key": self.send_key,
+            "get-text": self.get_text,
+            "close-window": self.close_window,
+            "set-spacing": self.set_spacing,
+            "set-window-title": self.set_window_title,
+        }
+
+    def run(self, args, stdin=None):
+        try:
+            r = subprocess.run([self.kitten, "@", "--to", self.listen_on] + args, input=stdin,
+                               capture_output=True, text=True, timeout=KITTEN_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            return {"rc": 1, "stdout": "", "stderr": "claude-kitty-rc-proxy: kitten timed out\n"}
+        return {"rc": r.returncode, "stdout": r.stdout, "stderr": r.stderr}
+
+    def handle(self, argv, stdin):
+        if not argv or argv[0] not in self.commands:
+            raise Denied(f"command {argv[0] if argv else ''!r} not allowed")
+        return self.commands[argv[0]](argv[1:], stdin)
+
+    def own(self, opts):
+        m = MATCH_RE.fullmatch(opts.get("--match", ""))
+        if not m:
+            raise Denied("--match must be id:N")
+        wid = int(m.group(1))
+        with self.lock:
+            if wid not in self.panes:
+                raise Denied(f"window {wid} was not launched by this proxy")
+        return wid
+
+    def prune(self):
+        r = self.run(["ls"])
+        if r["rc"] != 0:
+            return
+        try:
+            live = {w["id"] for osw in json.loads(r["stdout"])
+                    for tab in osw.get("tabs", []) for w in tab.get("windows", [])}
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return
+        with self.lock:
+            self.panes &= live
+
+    def launch(self, args, stdin):
+        opts, pos, command = parse(args, ("--location", "--cwd", "--match"), ("--keep-focus",))
+        if pos:
+            raise Denied("launch command must follow --")
+        location = opts.get("--location", "vsplit")
+        if location not in ("vsplit", "hsplit"):
+            raise Denied(f"location {location!r} not allowed")
+        with self.lock:
+            full = len(self.panes) >= MAX_PANES
+        if full:
+            self.prune()
+            with self.lock:
+                if len(self.panes) >= MAX_PANES:
+                    raise Denied(f"more than {MAX_PANES} teammate windows")
+        r = self.run(["launch", "--location", location, "--cwd", self.lead_cwd, "--keep-focus",
+                      "--match", f"window_id:{self.lead_wid}"] + self.env_args
+                     + ["--"] + self.prefix + (command or ["/bin/sh"]))
+        lines = r["stdout"].strip().splitlines()
+        if r["rc"] == 0 and lines and lines[-1].strip().isdigit():
+            with self.lock:
+                self.panes.add(int(lines[-1].strip()))
+        return r
+
+    def send_text(self, args, stdin):
+        opts, pos, rest = parse(args, ("--match",), ("--stdin",))
+        if pos or rest is not None or "--stdin" not in opts or stdin is None:
+            raise Denied("send-text takes exactly --stdin --match id:N")
+        return self.run(["send-text", "--stdin", "--match", f"id:{self.own(opts)}"], stdin)
+
+    def send_key(self, args, stdin):
+        opts, pos, rest = parse(args, ("--match",))
+        if rest is not None or not pos or not all(KEY_RE.fullmatch(k) for k in pos):
+            raise Denied("send-key takes --match id:N and key names")
+        return self.run(["send-key", "--match", f"id:{self.own(opts)}"] + pos)
+
+    def get_text(self, args, stdin):
+        opts, pos, rest = parse(args, ("--match", "--extent"))
+        extent = opts.get("--extent", "screen")
+        if pos or rest is not None or extent not in ("screen", "all"):
+            raise Denied("get-text takes --match id:N [--extent screen|all]")
+        return self.run(["get-text", "--match", f"id:{self.own(opts)}", "--extent", extent])
+
+    def close_window(self, args, stdin):
+        opts, pos, rest = parse(args, ("--match",))
+        if pos or rest is not None:
+            raise Denied("close-window takes --match id:N")
+        wid = self.own(opts)
+        r = self.run(["close-window", "--match", f"id:{wid}"])
+        if r["rc"] == 0:
+            with self.lock:
+                self.panes.discard(wid)
+        return r
+
+    def set_spacing(self, args, stdin):
+        opts, pos, rest = parse(args, ("--match",))
+        if rest is not None or not pos or not all(SPACING_RE.fullmatch(t) for t in pos):
+            raise Denied("set-spacing takes --match id:N and margin/padding settings")
+        return self.run(["set-spacing", "--match", f"id:{self.own(opts)}"] + pos)
+
+    def set_window_title(self, args, stdin):
+        opts, pos, rest = parse(args, ("--match",))
+        if rest is not None or len(pos) != 1 or len(pos[0]) > 200 or any(ord(c) < 32 for c in pos[0]):
+            raise Denied("set-window-title takes --match id:N and one printable title")
+        return self.run(["set-window-title", "--match", f"id:{self.own(opts)}", pos[0]])
+
+
+class Handler(socketserver.StreamRequestHandler):
+    def handle(self):
+        argv = []
+        try:
+            line = self.rfile.readline(MAX_REQUEST + 1)
+            if len(line) > MAX_REQUEST:
+                raise Denied("request too large")
+            req = json.loads(line)
+            argv, stdin = req.get("argv"), req.get("stdin")
+            if not isinstance(argv, list) or not all(isinstance(a, str) for a in argv) \
+                    or not (stdin is None or isinstance(stdin, str)):
+                argv = []
+                raise Denied("malformed request")
+            resp = self.server.policy.handle(argv, stdin)
+            log(f"ALLOW rc={resp['rc']} {shlex.join(argv)}")
+        except Denied as e:
+            log(f"DENY {e}: {shlex.join(argv)}")
+            resp = {"rc": 1, "stdout": "", "stderr": f"claude-kitty-rc-proxy: denied: {e}\n"}
+        except (ValueError, AttributeError, OSError) as e:
+            resp = {"rc": 1, "stdout": "", "stderr": f"claude-kitty-rc-proxy: bad request: {e}\n"}
+        try:
+            self.wfile.write(json.dumps(resp).encode() + b"\n")
+        except OSError:
+            pass
+
+
+def client(args):
+    path = os.environ.get(SOCKET_ENV)
+    if not path:
+        sys.stderr.write(f"claude-kitty-rc-proxy: ${SOCKET_ENV} is not set\n")
+        return 1
+    # The shim always passes `--to $KITTY_LISTEN_ON`; the proxy decides where requests go.
+    if args[:1] == ["--to"]:
+        args = args[2:]
+    elif args and args[0].startswith("--to="):
+        args = args[1:]
+    stdin = sys.stdin.read() if args[:1] == ["send-text"] and "--stdin" in args else None
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.connect(path)
+            s.sendall(json.dumps({"argv": args, "stdin": stdin}).encode() + b"\n")
+            s.shutdown(socket.SHUT_WR)
+            chunks = []
+            while True:
+                chunk = s.recv(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+        resp = json.loads(b"".join(chunks))
+    except (OSError, ValueError) as e:
+        sys.stderr.write(f"claude-kitty-rc-proxy: {e}\n")
+        return 1
+    sys.stdout.write(resp.get("stdout", ""))
+    sys.stderr.write(resp.get("stderr", ""))
+    return int(resp.get("rc", 1))
+
+
+def find_kitten():
+    for cand in (shutil.which("kitten"), "/Applications/kitty.app/Contents/MacOS/kitten"):
+        if cand and os.access(cand, os.X_OK):
+            return cand
+    return None
+
+
+def serve(args):
+    def fail(msg):
+        sys.stderr.write(f"claude-kitty-rc-proxy serve: {msg}\n")
+        return 2
+
+    if "--" not in args:
+        return fail("missing -- LEAD-CMD")
+    split = args.index("--")
+    opts, pos, _ = parse(args[:split], ("--socket", "--teammate-prefix"))
+    lead = args[split + 1:]
+    if pos or "--socket" not in opts or "--teammate-prefix" not in opts or not lead:
+        return fail("usage: serve --socket PATH --teammate-prefix 'ABS-PATH ... --' -- LEAD-CMD...")
+    prefix = shlex.split(opts["--teammate-prefix"])
+    if len(prefix) < 2 or not os.path.isabs(prefix[0]) or prefix[-1] != "--":
+        return fail("--teammate-prefix must start with an absolute path and end with --")
+    listen_on = os.environ.get("KITTY_LISTEN_ON", "")
+    lead_wid = os.environ.get("KITTY_WINDOW_ID", "")
+    if not listen_on.startswith("unix:") or not lead_wid.isdigit():
+        return fail("needs KITTY_LISTEN_ON=unix:... and KITTY_WINDOW_ID (run it inside kitty)")
+    kitten = find_kitten()
+    if not kitten:
+        return fail("kitten not found")
+    sock_path = os.path.abspath(opts["--socket"])
+    if os.path.lexists(sock_path):
+        return fail(f"{sock_path} already exists")
+
+    os.makedirs(os.path.dirname(LOG_PATH), mode=0o700, exist_ok=True)
+    old_umask = os.umask(0o077)
+    try:
+        server = socketserver.ThreadingUnixStreamServer(sock_path, Handler)
+    except OSError as e:
+        return fail(f"cannot bind {sock_path}: {e}")
+    finally:
+        os.umask(old_umask)
+    server.daemon_threads = True
+    server.policy = Policy(kitten, listen_on, int(lead_wid), os.path.realpath(os.getcwd()), prefix,
+                           teammate_env_args(os.environ))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    log(f"START socket={sock_path} lead_window={lead_wid} cwd={server.policy.lead_cwd}")
+
+    child = None
+
+    def forward(sig, _frame):
+        if child is not None and child.poll() is None:
+            child.send_signal(sig)
+
+    # ^C/^\ reach the whole foreground process group; the lead handles them itself.
+    # (Python-level handlers are reset to the default in the child on exec.)
+    signal.signal(signal.SIGINT, lambda *_: None)
+    signal.signal(signal.SIGQUIT, lambda *_: None)
+    signal.signal(signal.SIGTERM, forward)
+    signal.signal(signal.SIGHUP, forward)
+    env = dict(os.environ, KITTY_TMUX_SHIM_BIN=os.path.realpath(__file__), **{SOCKET_ENV: sock_path})
+    try:
+        child = subprocess.Popen(lead, env=env)
+        rc = child.wait()
+    except OSError as e:
+        rc = fail(f"cannot start {lead[0]}: {e}")
+    finally:
+        server.shutdown()
+        server.server_close()
+        try:
+            os.unlink(sock_path)
+        except OSError:
+            pass
+        log(f"STOP socket={sock_path}")
+    return 128 - rc if rc < 0 else rc
+
+
+def main():
+    args = sys.argv[1:]
+    if args[:1] == ["@"]:
+        return client(args[1:])
+    if args[:1] == ["serve"]:
+        return serve(args[1:])
+    sys.stderr.write(__doc__)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
