@@ -1,0 +1,4 @@
+# The repo root is not a stow package: `stow .` here must link nothing
+# (it used to drop ~/CLAUDE.md, ~/kitty, ~/nvim, ... into $HOME).
+# Install packages one by one: `stow <pkg>`, see scripts/setup.sh.
+.*
