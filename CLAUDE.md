@@ -8,7 +8,7 @@
 - `starship/` — starship prompt config managed via GNU Stow
 - `zsh/` — zshrc (zap + starship) managed via GNU Stow
   - `zsh/.config/zsh/completions/` — custom completion functions (in `fpath`), e.g. `_claude` for the Claude Code CLI: parses `claude … --help` (cached in `~/.cache/zsh/claude-help`, refreshed when the binary changes) plus dynamic values (sessions, agents, MCP servers, plugins)
-- `claude-kitty/` — vendored [kitty-extensions](https://github.com/jLAM-ERR/kitty-extensions) tmux-shim: fake `tmux` (`~/.claude/kitty-tmux-shim/bin/tmux`) + launcher `~/.local/bin/claude-kitty` (`claude --teammate-mode tmux` with the shim on `PATH` for that process only) so agent-team teammates open as kitty splits. **Stow with `--no-folding`** (shim writes `shim.log`/`state.json` into `~/.claude/kitty-tmux-shim/`). Upstream SHA + update steps in `claude-kitty/README.md`
+- `claude-kitty/` — vendored [kitty-extensions](https://github.com/jLAM-ERR/kitty-extensions) tmux-shim: fake `tmux` (`~/.claude/kitty-tmux-shim/bin/tmux`) + launcher `~/.local/bin/claude-kitty` (`claude --teammate-mode tmux` with the shim on `PATH` for that process only) so agent-team teammates open as kitty splits. **Stow with `--no-folding`** (shim writes `shim.log`/`state.json` into `~/.claude/kitty-tmux-shim/`). Upstream SHA + update steps in `claude-kitty/README.md`. Local addition `claude-kitty-rc-proxy`: runs a nono-sandboxed lead without giving it kitty's socket (full kitty control); it relays only the shim's commands and wraps every teammate in the lead's nono prefix
 - `scripts/` — helper scripts (not stowed)
 
 ## Conventions
